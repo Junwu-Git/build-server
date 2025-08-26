@@ -271,15 +271,19 @@ class BrowserManager {
       });
       this.page = await this.context.newPage();
       this.logger.info(`[浏览器] 正在加载账号 ${authIndex} 并访问目标网页...`);
-      const targetUrl = 'https://aistudio.google.com/u/0/apps/bundled/blank?showPreview=true&showCode=true&showAssistant=true';
+      const targetUrl = 'https://aistudio.google.com/u/0/apps/bundled/blank?showAssistant=true&showCode=true';
       await this.page.goto(targetUrl, { timeout: 120000, waitUntil: 'networkidle' });
       this.logger.info('[浏览器] 网页加载完成，正在注入客户端脚本...');
 
+      this.logger.info('[浏览器] 正在点击 "Code" 按钮以切换到代码视图...');
+      await this.page.getByRole('button', { name: 'Code' }).click();
+      this.logger.info('[浏览器] 已切换到代码视图。');
+
       const editorContainerLocator = this.page.locator('div.monaco-editor').first();
 
-      this.logger.info('[浏览器] 等待编辑器出现，最长120秒...');
-      await editorContainerLocator.waitFor({ state: 'visible', timeout: 120000 });
-      this.logger.info('[浏览器] 编辑器已出现，准备粘贴脚本。');
+      this.logger.info('[浏览器] 等待编辑器附加到DOM，最长120秒...');
+      await editorContainerLocator.waitFor({ state: 'attached', timeout: 120000 });
+      this.logger.info('[浏览器] 编辑器已附加。');
 
       this.logger.info('[浏览器] 等待5秒，之后将在页面下方执行一次模拟点击以确保页面激活...');
       await this.page.waitForTimeout(5000);
@@ -294,12 +298,16 @@ class BrowserManager {
         this.logger.warn('[浏览器] 无法获取视窗大小，跳过页面底部模拟点击。');
       }
 
-      await editorContainerLocator.click({ timeout: 120000 });
+      await editorContainerLocator.click({ force: true, timeout: 120000 });
       await this.page.evaluate(text => navigator.clipboard.writeText(text), buildScriptContent);
       const isMac = os.platform() === 'darwin';
       const pasteKey = isMac ? 'Meta+V' : 'Control+V';
       await this.page.keyboard.press(pasteKey);
-      this.logger.info('[浏览器] 脚本已粘贴。浏览器端初始化完成。');
+      this.logger.info('[浏览器] 脚本已粘贴。');
+
+      this.logger.info('[浏览器] 正在点击 "Preview" 按钮以使代码生效...');
+      await this.page.getByRole('button', { name: 'Preview' }).click();
+      this.logger.info('[浏览器] 已切换到预览视图。浏览器端初始化完成。');
 
 
       this.currentAuthIndex = authIndex;
