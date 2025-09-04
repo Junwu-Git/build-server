@@ -275,9 +275,73 @@ class BrowserManager {
       await this.page.goto(targetUrl, { timeout: 120000, waitUntil: 'networkidle' });
       this.logger.info('[浏览器] 网页加载完成，正在注入客户端脚本...');
 
-      this.logger.info('[浏览器] 正在点击 "Code" 按钮以切换到代码视图...');
-      await this.page.getByRole('button', { name: 'Code' }).click();
-      this.logger.info('[浏览器] 已切换到代码视图。');
+      // ==============================
+      // 稳健关闭弹窗并延迟点击 "Code"
+      // ==============================
+      this.logger.info('[浏览器] 检查并关闭 "It\'s time to build" 弹窗...');
+
+      const maxWaitMs = 15000;      // 最大等待时间 15 秒
+      const checkInterval = 1000;    // 每 1 秒检查一次
+      let elapsed = 0;
+
+      while (elapsed < maxWaitMs) {
+        const popup = this.page.locator('text=It\'s time to build');
+
+        if (await popup.isVisible({ timeout: 500 }).catch(() => false)) {
+          this.logger.info(`[浏览器] 弹窗检测到，尝试关闭...`);
+
+          const closeButton = this.page.locator(
+            'button:has-text("✕"), button:has-text("close"), svg[aria-label="Close"]'
+          );
+
+          if (await closeButton.count() > 0) {
+            try {
+              await closeButton.first().click({ force: true });
+              this.logger.info('[浏览器] 点击弹窗关闭按钮');
+            } catch (err) {
+              this.logger.warn('[浏览器] 弹窗关闭点击失败，稍后重试');
+            }
+          } else {
+            this.logger.info('[浏览器] 未找到关闭按钮，稍后重试');
+          }
+
+          await this.page.waitForTimeout(checkInterval);
+          elapsed += checkInterval;
+        } else {
+          this.logger.info('[浏览器] 弹窗已消失或未出现');
+          break;
+        }
+      }
+
+      // ==============================
+      // 调试日志：输出所有按钮并截图
+      // ==============================
+      this.logger.info('[浏览器] 正在查找 "Code" 按钮...');
+      const allButtons = await this.page.locator('button').allTextContents();
+      this.logger.info(`[调试] 页面按钮列表: ${JSON.stringify(allButtons, null, 2)}`);
+
+      const debugPath = `debug-buttons-${Date.now()}.png`;
+      await this.page.screenshot({ path: debugPath, fullPage: true });
+      this.logger.info(`[调试] 已保存按钮截图: ${debugPath}`);
+
+      // ==============================
+      // 等待按钮可点击后再操作
+      // ==============================
+      try {
+        const codeButton = this.page.getByRole('button', { name: /^Code$/ });
+        
+        // 等待按钮可点击
+        await codeButton.waitFor({ timeout: 30000 });
+        
+        // 延迟短时间，确保弹窗动画完全消失
+        await this.page.waitForTimeout(500);
+
+        // 点击按钮，使用 force 防止偶发遮挡
+        await codeButton.click({ force: true });
+        this.logger.info('[浏览器] 已点击 "Code" 按钮');
+      } catch (err) {
+        this.logger.error('[浏览器] 点击 "Code" 按钮失败', err);
+      }
 
       const editorContainerLocator = this.page.locator('div.monaco-editor').first();
 
