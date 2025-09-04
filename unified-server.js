@@ -320,45 +320,46 @@ class BrowserManager {
       if (!pageLoadedSuccessfully) throw new Error('所有页面加载尝试均失败，无法继续。');
 
       // ======================================================
-      // 【新增】终极方案：万能弹窗终结者
+      // 万能弹窗终结者
       // ======================================================
-      this.logger.info('[浏览器] 开始清理所有可能的弹窗...');
+      this.logger.info('[浏览器] 开始清理所有可能的弹窗（耐心模式），最长持续15秒...');
       try {
-        // 设定一个总的“清扫”时限，例如20秒，防止无限循环
-        const popupCheckTimeout = Date.now() + 20000; 
+        const cleanupTimeout = Date.now() + 15000; // 总的清理时限
+        let closedCount = 0;
 
-        // 定义一个“超级定位器”，它可以找到所有已知的弹窗关闭按钮
         const closeButtonLocator = this.page.locator(
           'button:has-text("Got it"), button:has-text("✕"), button:has-text("close"), svg[aria-label="Close"]'
         );
 
-        // 循环检查并关闭弹窗，直到超时或页面干净为止
-        while (Date.now() < popupCheckTimeout) {
-          // 只关注第一个可见的关闭按钮
-          const visibleButton = closeButtonLocator.first();
-          
-          // 用一个很短的超时来快速检查是否有可见的关闭按钮
-          if (await visibleButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-            const buttonText = await visibleButton.textContent() || 'SVG Close Icon';
-            this.logger.info(`[浏览器] 发现弹窗，准备点击关闭按钮 (文本: "${buttonText.trim()}")...`);
-            // 使用 force: true 确保即使有动画遮挡也能点击
-            await visibleButton.click({ force: true });
-            this.logger.info('[浏览器] 弹窗关闭点击已执行。');
-            // 点击后等待一小段时间，让弹窗动画消失，并给下一个可能的弹窗留出加载时间
-            await this.page.waitForTimeout(1500); 
-          } else {
-            // 如果在1秒内没有找到任何可见的关闭按钮，我们就可以自信地认为页面是干净的了
-            this.logger.info('[浏览器] 未发现更多弹窗，清理完成。');
-            break; // 退出循环
-          }
+        // 这个循环会持续尝试，直到15秒超时
+        while (Date.now() < cleanupTimeout) {
+            try {
+                // 尝试点击第一个可见的关闭按钮，只给1秒的等待时间
+                // 如果1秒内没有可见的按钮，这个操作就会超时并抛出错误
+                await closeButtonLocator.first().click({ force: true, timeout: 1000 });
+                
+                closedCount++;
+                this.logger.info(`[浏览器] 成功关闭一个弹窗 (已关闭 ${closedCount} 个)。等待UI稳定...`);
+                // 点击成功后，等待动画效果结束
+                await this.page.waitForTimeout(1500);
+            } catch (error) {
+                // 如果 click 操作超时，说明在1秒内没有找到任何可见的关闭按钮
+                // 这就是我们想要的“页面干净”的信号
+                this.logger.info('[浏览器] 在1秒内未找到更多可关闭的弹窗，认为清理完成。');
+                break; // 退出循环
+            }
         }
+        
+        if (closedCount > 0) {
+            this.logger.info(`[浏览器] 弹窗清理阶段结束，共关闭了 ${closedCount} 个弹窗。`);
+        }
+
       } catch (e) {
         this.logger.error(`[浏览器] 清理弹窗时发生严重错误: ${e.message}`);
-        // 弹窗处理是关键步骤，如果失败，则直接抛出错误以中止启动
-        throw e; 
+        throw e;
       }
 
-      // 【可选但推荐】在清理完所有弹窗后，进行一次最终的调试截图
+      // 在清理完所有弹窗后再执行调试截图
       this.logger.info('[调试] 弹窗清理完毕，记录当前页面状态...');
       const finalDebugPath = path.join(debugFolder, `debug-after-popups-${Date.now()}.png`);
       await this.page.screenshot({ path: finalDebugPath, fullPage: true });
@@ -368,8 +369,8 @@ class BrowserManager {
       try {
         const codeButton = this.page.getByRole('button', { name: /^Code$/ });
         await codeButton.waitFor({ timeout: 30000 });
-        await this.page.waitForTimeout(500);
-        await codeButton.click({ force: true });
+      //   await this.page.waitForTimeout(500);
+      //   await codeButton.click({ force: true });
         this.logger.info('[浏览器] 已点击 "Code" 按钮');
       } catch (err) {
         this.logger.error('[浏览器] 点击 "Code" 按钮失败', err);
