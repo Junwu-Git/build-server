@@ -37,6 +37,8 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            # 【建议新增】始终创建一个 latest 标签，指向最新的版本发布
+            type=raw,value=latest
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -45,6 +47,10 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          # 【已移除】不再指定 platforms，让它只构建默认的 amd64
+          # 【新增】禁用 provenance 和 sbom，确保生成传统的、兼容性最强的镜像格式
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
