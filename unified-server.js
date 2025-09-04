@@ -590,6 +590,8 @@ class RequestHandler {
     this.retryDelay = this.config.retryDelay;
     this.failureCount = 0;
     this.isAuthSwitching = false;
+    this.fullCycleFailure = false; // 【新增】全循环失败标志
+    this.startOfFailureCycleIndex = null; // 【新增】记录失败循环的起始账号
   }
 
   get currentAuthIndex() {
@@ -622,6 +624,19 @@ class RequestHandler {
     const nextAuthIndex = this._getNextAuthIndex();
     const totalAuthCount = this.authSource.getAvailableIndices().length;
 
+    // 【修改】增加熔断检查逻辑
+    if (this.fullCycleFailure) {
+        this.logger.error('🔴 [认证] 已检测到全账号循环失败，将暂停自动切换以防止资源过载。请检查所有账号有效性或服务状态。');
+        this.isAuthSwitching = false;
+        throw new Error('全账号循环失败，自动切换已熔断。');
+    }
+    
+    // 【修改】检查是否完成了一个失败的循环
+    if (this.startOfFailureCycleIndex !== null && nextAuthIndex === this.startOfFailureCycleIndex) {
+        this.logger.error('🔴 [认证] 已完成一整轮账号切换但问题依旧，触发全循环失败熔断机制！');
+        this.fullCycleFailure = true;
+    }
+
     if (nextAuthIndex === null) {
       this.logger.error('🔴 [认证] 无法切换账号，因为没有可用的认证源！');
       this.isAuthSwitching = false;
@@ -639,9 +654,12 @@ class RequestHandler {
     try {
       await this.browserManager.switchAccount(nextAuthIndex);
       this.failureCount = 0;
+      // 【修改】切换成功后，重置熔断状态
+      this.fullCycleFailure = false;
+      this.startOfFailureCycleIndex = null;
       this.logger.info('==================================================');
       this.logger.info(`✅ [认证] 成功切换到账号索引 ${this.currentAuthIndex}`);
-      this.logger.info(`✅ [认证] 失败计数已重置为0`);
+      this.logger.info(`✅ [认证] 失败计数已重置为0，熔断机制已重置。`);
       this.logger.info('==================================================');
     } catch (error) {
       this.logger.error('==================================================');
@@ -676,7 +694,7 @@ class RequestHandler {
     return correctedDetails;
   }
 
-    async _handleRequestFailureAndSwitch(errorDetails, res) {
+async _handleRequestFailureAndSwitch(errorDetails, res) {
     // 新增：在调试模式下打印完整的原始错误信息
     if (this.config.debugMode) {
       this.logger.debug(`[认证][调试] 收到来自浏览器的完整错误详情:\n${JSON.stringify(errorDetails, null, 2)}`);
@@ -697,6 +715,12 @@ class RequestHandler {
       }
     }
 
+    // 【修改】如果熔断已触发，则不再增加失败计数
+    if (this.fullCycleFailure) {
+        this.logger.warn('[认证] 熔断已触发，跳过失败计数和切换逻辑。');
+        return;
+    }
+    
     const isImmediateSwitch = this.config.immediateSwitchStatusCodes.includes(correctedDetails.status);
 
     if (isImmediateSwitch) {
@@ -715,6 +739,13 @@ class RequestHandler {
     if (this.config.failureThreshold > 0) {
       this.failureCount++;
       this.logger.warn(`⚠️ [认证] 请求失败 - 失败计数: ${this.failureCount}/${this.config.failureThreshold} (当前账号索引: ${this.currentAuthIndex}, 状态码: ${correctedDetails.status})`);
+
+      // 【修改】在第一次达到阈值时，记录下当前账号作为循环的起点
+      if (this.failureCount >= this.config.failureThreshold && this.startOfFailureCycleIndex === null) {
+          this.logger.info(`[认证] 启动失败循环检测，起始账号索引为: ${this.currentAuthIndex}`);
+          this.startOfFailureCycleIndex = this.currentAuthIndex;
+      }
+      
       if (this.failureCount >= this.config.failureThreshold) {
         this.logger.warn(`🔴 [认证] 达到失败阈值！准备切换账号...`);
         if (res) this._sendErrorChunkToClient(res, `连续失败${this.failureCount}次，正在尝试切换账号...`);
@@ -730,6 +761,8 @@ class RequestHandler {
       this.logger.warn(`[认证] 请求失败 (状态码: ${correctedDetails.status})。基于计数的自动切换已禁用 (failureThreshold=0)`);
     }
   }
+
+
 
   _getModelFromRequest(req) {
     let body = req.body;
@@ -921,6 +954,8 @@ class RequestHandler {
         this.logger.info(`✅ [认证] 请求成功 - 失败计数已从 ${this.failureCount} 重置为 0`);
       }
       this.failureCount = 0;
+      this.fullCycleFailure = false;
+      this.startOfFailureCycleIndex = null;
 
       const dataMessage = await messageQueue.dequeue();
       const endMessage = await messageQueue.dequeue();
@@ -989,6 +1024,8 @@ class RequestHandler {
       this.logger.info(`✅ [认证] 请求成功 - 失败计数已从 ${this.failureCount} 重置为 0`);
     }
     this.failureCount = 0;
+    this.fullCycleFailure = false;
+    this.startOfFailureCycleIndex = null;
     this._setResponseHeaders(res, headerMessage);
     this.logger.info('[请求] 已向客户端发送真实响应头，开始流式传输...');
     try {
