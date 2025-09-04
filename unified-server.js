@@ -320,41 +320,42 @@ class BrowserManager {
       if (!pageLoadedSuccessfully) throw new Error('所有页面加载尝试均失败，无法继续。');
 
       // ======================================================
-      // 【终极方案 V3】最强弹窗处理器
+      // 【终极方案 V4 - 语法修正版】
       // ======================================================
-      this.logger.info('[浏览器] 开始清理所有可能的弹窗（最强模式），最长持续20秒...');
+      this.logger.info('[浏览器] 开始清理所有可能的弹窗（最强模式 V4），最长持续20秒...');
       try {
-        const cleanupTimeout = Date.now() + 20000; // 总清理时限
+        const cleanupTimeout = Date.now() + 20000;
         let closedCount = 0;
 
-        // 【关键升级】使用更强大、更可靠的定位器
-        const closeButtonLocator = this.page.locator(
-          // 方案1: 通过用户可见的角色和文本定位 (最推荐)
-          "button:visible:has-text(/^Got it$/i), " +
-          // 方案2: 其他备用关闭按钮
-          "button:visible:has-text('✕'), " +
-          "button:visible:has-text('close'), " +
-          "svg[aria-label='Close']:visible"
-        );
+        // 【关键修正】使用 locator.or() 来组合不同的定位策略
+        const gotItButton = this.page.getByRole('button', { name: 'Got it', exact: false });
+        const closeSymbolButton = this.page.getByRole('button', { name: '✕' });
+        const closeTextButton = this.page.getByRole('button', { name: 'close', exact: false });
+        const closeSvg = this.page.locator('svg[aria-label="Close"]');
 
-        // 这个循环会持续检查，直到超时
+        const closeButtonLocator = gotItButton
+          .or(closeSymbolButton)
+          .or(closeTextButton)
+          .or(closeSvg);
+
+        // 循环逻辑保持不变，但现在它使用的是一个语法正确的定位器
         while (Date.now() < cleanupTimeout) {
-            const buttons = await closeButtonLocator.all();
-            if (buttons.length > 0) {
-                this.logger.info(`[浏览器] 发现 ${buttons.length} 个可关闭的弹窗按钮，正在处理第一个...`);
-                await buttons[0].click({ force: true }); // 使用 force 确保点击成功
-                closedCount++;
-                this.logger.info(`[浏览器] 成功关闭一个弹窗 (已关闭 ${closedCount} 个)。等待1.5秒让UI稳定...`);
-                await this.page.waitForTimeout(1500);
-                // 继续下一次循环，检查是否还有其他弹窗
-                continue;
-            }
+            // 我们只关注第一个可见的按钮
+            const visibleButton = closeButtonLocator.first();
             
-            // 如果没有找到按钮，等待一小段时间再试，以应对渲染延迟
-            await this.page.waitForTimeout(1000);
-            this.logger.info('[浏览器] 暂时未发现弹窗，1秒后再次检查...');
+            try {
+                // 等待最多1.5秒，看是否有按钮变得可见并可点击
+                await visibleButton.click({ force: true, timeout: 1500 });
+                closedCount++;
+                this.logger.info(`[浏览器] 成功关闭一个弹窗 (已关闭 ${closedCount} 个)。等待UI稳定...`);
+                await this.page.waitForTimeout(1500); // 等待动画
+            } catch (error) {
+                // 如果 click 超时，说明在1.5秒内没有找到任何可见的关闭按钮
+                this.logger.info('[浏览器] 在1.5秒内未找到更多可关闭的弹窗，认为清理完成。');
+                break; // 成功退出循环
+            }
         }
-
+        
         if (closedCount > 0) {
             this.logger.info(`[浏览器] 弹窗清理阶段结束，共关闭了 ${closedCount} 个弹窗。`);
         } else {
@@ -366,6 +367,7 @@ class BrowserManager {
         throw e;
       }
 
+      
       // 在清理完所有弹窗后再执行调试截图
       this.logger.info('[调试] 弹窗清理完毕，记录当前页面状态...');
       const finalDebugPath = path.join(debugFolder, `debug-after-popups-${Date.now()}.png`);
