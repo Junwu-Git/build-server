@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         
-      - name: Download and extract camoufox
+      - name: Download and extract camoufox dependency
         run: |
           wget https://github.com/daijro/camoufox/releases/download/v135.0.1-beta.24/camoufox-135.0.1-beta.24-lin.x86_64.zip
           unzip camoufox-135.0.1-beta.24-lin.x86_64.zip -d camoufox-linux
