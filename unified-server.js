@@ -320,80 +320,76 @@ class BrowserManager {
       if (!pageLoadedSuccessfully) throw new Error('所有页面加载尝试均失败，无法继续。');
 
       // ======================================================
-      // 【最终、最强方案 V8 - 唤醒优先】
+      // 【V5方案 - 清理弹窗 + Force容错】
       // ======================================================
-
-      // 第一步：执行“唤醒点击” (治本)
-      // 页面加载后处于半休眠状态，需要一次交互来触发核心UI的渲染。
-      this.logger.info('[浏览器] 页面加载完成，执行一次页面中央点击以“唤醒”前端应用...');
+      this.logger.info('[浏览器] 开始清理所有可能的弹窗，最长持续20秒...');
       try {
-        // 在页面一个不会导致跳转的安全位置（例如中心）进行点击
-        const viewport = this.page.viewportSize();
-        if (viewport) {
-          await this.page.mouse.click(viewport.width / 2, viewport.height / 2, { delay: 100 });
-        } else {
-          // 备用方案，点击 body
-          await this.page.locator('body').click({ force: true, timeout: 5000 });
-        }
-        this.logger.info('[浏览器] “唤醒点击”已执行，等待UI响应...');
-        await this.page.waitForTimeout(2000); // 等待2秒，让UI有足够的时间渲染
-      } catch (e) {
-        this.logger.warn(`[浏览器] 执行“唤醒点击”时出错: ${e.message}。将继续尝试...`);
-      }
+        const cleanupTimeout = Date.now() + 20000;
+        let closedCount = 0;
 
-      // 第二步：等待核心UI稳定
-      // 在“唤醒”之后，我们现在可以自信地等待核心UI元素的出现。
-      this.logger.info('[浏览器] 等待核心UI元素 ("Code" 或 "Preview" 按钮) 加载，最长60秒...');
-      try {
-        const codeButton = this.page.getByRole('button', { name: /^Code$/i });
-        const previewButton = this.page.getByRole('button', { name: /^Preview$/i });
-        await codeButton.or(previewButton).first().waitFor({ state: 'visible', timeout: 60000 });
-        this.logger.info('[浏览器] 核心UI元素已加载并可见。');
-      } catch (err) {
-        this.logger.error('[浏览器] 在“唤醒”后，60秒内仍未能等到核心UI按钮，页面加载失败。', err);
-        const finalErrorPath = path.join(debugFolder, `fatal-no-core-ui-${Date.now()}.png`);
-        await this.page.screenshot({ path: finalErrorPath, fullPage: true });
-        this.logger.error(`[调试] 致命错误截图已保存: ${finalErrorPath}`);
-        throw err; // 这是无法恢复的错误，必须中止
-      }
-
-      // 第三步：清理所有已知的弹窗障碍
-      this.logger.info('[浏览器] 核心UI加载完成，现在开始执行一次性的弹窗清理...');
-      try {
+        // 【语法修正】使用 locator.or() 来组合不同的定位策略
         const gotItButton = this.page.getByRole('button', { name: 'Got it', exact: false });
         const closeSymbolButton = this.page.getByRole('button', { name: '✕' });
-        const closeButtonLocator = gotItButton.or(closeSymbolButton);
+        const closeTextButton = this.page.getByRole('button', { name: 'close', exact: false });
+        const closeSvg = this.page.locator('svg[aria-label="Close"]');
 
-        const buttonsToClose = await closeButtonLocator.all();
-        if (buttonsToClose.length > 0) {
-          this.logger.info(`[浏览器] 发现 ${buttonsToClose.length} 个弹窗，正在逐一强制关闭...`);
-          for (const button of buttonsToClose) {
-            await button.click({ force: true });
-            await this.page.waitForTimeout(1000); // 等待动画
-          }
-        } else {
-          this.logger.info('[浏览器] 未发现需要清理的弹窗。');
+        const closeButtonLocator = gotItButton
+          .or(closeSymbolButton)
+          .or(closeTextButton)
+          .or(closeSvg);
+
+        // 循环逻辑，持续清理，直到超时或页面干净
+        while (Date.now() < cleanupTimeout) {
+            const visibleButton = closeButtonLocator.first();
+            try {
+                // 等待最多1.5秒，看是否有按钮变得可见
+                await visibleButton.waitFor({ state: 'visible', timeout: 1500 });
+                // 使用 force: true 确保点击成功
+                await visibleButton.click({ force: true });
+                closedCount++;
+                this.logger.info(`[浏览器] 成功强制关闭一个弹窗 (已关闭 ${closedCount} 个)。等待UI稳定...`);
+                await this.page.waitForTimeout(1500); // 等待动画
+            } catch (error) {
+                // 如果 waitFor 超时，说明在1.5秒内没有找到任何可见的关闭按钮
+                this.logger.info('[浏览器] 在1.5秒内未找到更多可关闭的弹窗，认为清理完成。');
+                break; // 成功退出循环
+            }
         }
+        
+        if (closedCount > 0) {
+            this.logger.info(`[浏览器] 弹窗清理阶段结束，共关闭了 ${closedCount} 个弹窗。`);
+        } else {
+            this.logger.info('[浏览器] 在20秒内未发现任何已知弹窗。');
+        }
+
       } catch (e) {
-        this.logger.warn(`[浏览器] 清理弹窗时发生非致命错误: ${e.message}`);
+        this.logger.error(`[浏览器] 清理弹窗时发生严重错误: ${e.message}`);
+        throw e;
       }
-      
-      // 第四步：执行核心操作 (带最终截图和Force容错)
-      this.logger.info('[调试] 最终交互前截图...');
-      const finalInteractionPath = path.join(debugFolder, `debug-before-click-${Date.now()}.png`);
-      await this.page.screenshot({ path: finalInteractionPath, fullPage: true });
-      this.logger.info(`[调试] 最终交互前截图已保存: ${finalInteractionPath}`);
-      
+
+      // 在清理完所有弹窗后再执行调试截图
+      this.logger.info('[调试] 弹窗清理完毕，记录当前页面状态...');
+      const finalDebugPath = path.join(debugFolder, `debug-after-popups-${Date.now()}.png`);
+      await this.page.screenshot({ path: finalDebugPath, fullPage: true });
+      this.logger.info(`[调试] 清理后截图已保存: ${finalDebugPath}`);
+
+      // 点击 Code 按钮 (保留 force: true 作为最终容错)
       try {
-        const codeButton = this.page.getByRole('button', { name: /^Code$/i });
-        await codeButton.click({ force: true, timeout: 10000 });
+        const codeButton = this.page.getByRole('button', { name: /^Code$/ });
+
+        // 第一步：耐心等待按钮在DOM中出现并可见
+        await codeButton.waitFor({ timeout: 30000 });
+
+        // 第二步：使用 force: true 作为最终保险，强行点击
+        await codeButton.click({ force: true });
+        
         this.logger.info('[浏览器] 已成功强制点击 "Code" 按钮。');
       } catch (err) {
-        this.logger.error('[浏览器] 在清理和等待后，点击 "Code" 按钮依然失败！', err);
-        throw err;
+        this.logger.error('[浏览器] 强制点击 "Code" 按钮依然失败，可能元素在超时前都未出现', err);
+        throw err; // 关键步骤失败，抛出错误
       }
       
-      // 第五步：注入并执行脚本 (后续所有代码)
+      // 后续的注入脚本逻辑
       const editorContainerLocator = this.page.locator('div.monaco-editor').first();
             
       this.logger.info('[浏览器] 等待编辑器附加到DOM，最长120秒...');
