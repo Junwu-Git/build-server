@@ -320,38 +320,45 @@ class BrowserManager {
       if (!pageLoadedSuccessfully) throw new Error('所有页面加载尝试均失败，无法继续。');
 
       // ======================================================
-      // 万能弹窗终结者
+      // 【终极方案 V3】最强弹窗处理器
       // ======================================================
-      this.logger.info('[浏览器] 开始清理所有可能的弹窗（耐心模式），最长持续15秒...');
+      this.logger.info('[浏览器] 开始清理所有可能的弹窗（最强模式），最长持续20秒...');
       try {
-        const cleanupTimeout = Date.now() + 15000; // 总的清理时限
+        const cleanupTimeout = Date.now() + 20000; // 总清理时限
         let closedCount = 0;
 
+        // 【关键升级】使用更强大、更可靠的定位器
         const closeButtonLocator = this.page.locator(
-          'button:has-text("Got it"), button:has-text("✕"), button:has-text("close"), svg[aria-label="Close"]'
+          // 方案1: 通过用户可见的角色和文本定位 (最推荐)
+          "button:visible:has-text(/^Got it$/i), " +
+          // 方案2: 其他备用关闭按钮
+          "button:visible:has-text('✕'), " +
+          "button:visible:has-text('close'), " +
+          "svg[aria-label='Close']:visible"
         );
 
-        // 这个循环会持续尝试，直到15秒超时
+        // 这个循环会持续检查，直到超时
         while (Date.now() < cleanupTimeout) {
-            try {
-                // 尝试点击第一个可见的关闭按钮，只给1秒的等待时间
-                // 如果1秒内没有可见的按钮，这个操作就会超时并抛出错误
-                await closeButtonLocator.first().click({ force: true, timeout: 1000 });
-                
+            const buttons = await closeButtonLocator.all();
+            if (buttons.length > 0) {
+                this.logger.info(`[浏览器] 发现 ${buttons.length} 个可关闭的弹窗按钮，正在处理第一个...`);
+                await buttons[0].click({ force: true }); // 使用 force 确保点击成功
                 closedCount++;
-                this.logger.info(`[浏览器] 成功关闭一个弹窗 (已关闭 ${closedCount} 个)。等待UI稳定...`);
-                // 点击成功后，等待动画效果结束
+                this.logger.info(`[浏览器] 成功关闭一个弹窗 (已关闭 ${closedCount} 个)。等待1.5秒让UI稳定...`);
                 await this.page.waitForTimeout(1500);
-            } catch (error) {
-                // 如果 click 操作超时，说明在1秒内没有找到任何可见的关闭按钮
-                // 这就是我们想要的“页面干净”的信号
-                this.logger.info('[浏览器] 在1秒内未找到更多可关闭的弹窗，认为清理完成。');
-                break; // 退出循环
+                // 继续下一次循环，检查是否还有其他弹窗
+                continue;
             }
+            
+            // 如果没有找到按钮，等待一小段时间再试，以应对渲染延迟
+            await this.page.waitForTimeout(1000);
+            this.logger.info('[浏览器] 暂时未发现弹窗，1秒后再次检查...');
         }
-        
+
         if (closedCount > 0) {
             this.logger.info(`[浏览器] 弹窗清理阶段结束，共关闭了 ${closedCount} 个弹窗。`);
+        } else {
+            this.logger.info('[浏览器] 在20秒内未发现任何已知弹窗。');
         }
 
       } catch (e) {
@@ -365,15 +372,17 @@ class BrowserManager {
       await this.page.screenshot({ path: finalDebugPath, fullPage: true });
       this.logger.info(`[调试] 清理后截图已保存: ${finalDebugPath}`);
 
-      // 点击 Code 按钮
+      // 点击 Code 按钮 (现在可以自信地去掉 force: true)
       try {
         const codeButton = this.page.getByRole('button', { name: /^Code$/ });
-        await codeButton.waitFor({ timeout: 30000 });
-        await codeButton.click({ force: true });
-      //   await this.page.waitForTimeout(500);
-        this.logger.info('[浏览器] 已成功强制点击 "Code" 按钮。');
+        this.logger.info('[浏览器] 正在点击 "Code" 按钮...');
+        // 【重要】我们治好了根源，所以不再需要 force: true
+        await codeButton.click({ timeout: 30000 }); 
+        this.logger.info('[浏览器] 已成功点击 "Code" 按钮。');
       } catch (err) {
-        this.logger.error('[浏览器] 强制点击 "Code" 按钮依然失败，可能元素不存在', err);
+        this.logger.error('[浏览器] 清理弹窗后，点击 "Code" 按钮依然失败，请检查截图', err);
+        // 如果这里还失败，说明有未知问题，抛出错误让启动失败
+        throw err;
       }
 
       const editorContainerLocator = this.page.locator('div.monaco-editor').first();
