@@ -1,6 +1,6 @@
 FROM node:18-slim
 
-# 安装必要的系统依赖（用于camoufox浏览器）
+# 安装必要的系统依赖，并新增 gosu 用于权限切换
 RUN apt-get update && apt-get install -y \
     wget \
     fonts-liberation \
@@ -22,9 +22,10 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libxtst6 \
     xvfb \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建用户目录
+# 创建一个默认的 user 用户 (UID/GID 在启动时会被 entrypoint 脚本修改)
 RUN useradd -m -s /bin/bash user
 WORKDIR /home/user
 
@@ -32,20 +33,21 @@ WORKDIR /home/user
 COPY package*.json ./
 RUN npm install
 
-# 复制应用文件
+# 复制应用文件，包括 entrypoint 脚本
+COPY entrypoint.sh /usr/local/bin/
 COPY unified-server.js dark-browser.js ./
 COPY auth/ ./auth/
 COPY camoufox-linux/ ./camoufox-linux/
 
-# 设置文件权限和camoufox可执行权限
-RUN chown -R user:user /home/user && \
+# 仅设置可执行权限，所有权将在 entrypoint 脚本中动态修复
+RUN chmod +x /usr/local/bin/entrypoint.sh && \
     chmod +x /home/user/camoufox-linux/camoufox
 
-# 切换到user用户
-USER user
-
-# 暴露端口
+# 暴露端口作为镜像的元数据，这是一个最佳实践
 EXPOSE 8889
 
-# 启动命令
+# 设置 Entrypoint，容器启动时会首先执行这个脚本
+ENTRYPOINT ["entrypoint.sh"]
+
+# 定义默认命令，它会作为参数传递给 Entrypoint
 CMD ["node", "unified-server.js"]
