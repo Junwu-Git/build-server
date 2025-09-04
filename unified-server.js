@@ -275,6 +275,42 @@ class BrowserManager {
       await this.page.goto(targetUrl, { timeout: 120000, waitUntil: 'networkidle' });
       this.logger.info('[浏览器] 网页加载完成，正在注入客户端脚本...');
 
+      // ======================================================
+      // 【增强版】带有重试逻辑的页面加载
+      // ======================================================
+      let pageLoadedSuccessfully = false;
+      const maxNavRetries = 3; // 定义最大导航重试次数
+      for (let attempt = 1; attempt <= maxNavRetries; attempt++) {
+        try {
+          this.logger.info(`[浏览器] 页面加载尝试 #${attempt}/${maxNavRetries}...`);
+          await this.page.goto(targetUrl, { timeout: 120000, waitUntil: 'networkidle' });
+          
+          // 增加一个额外的检查，确认页面不是错误页
+          const internalErrorLocator = this.page.locator('text=An internal error occurred');
+          if (await internalErrorLocator.isVisible({ timeout: 5000 }).catch(() => false)) {
+            // 即使加载成功，但内容是错误页，也视为失败
+            throw new Error('页面显示 "An internal error occurred"，可能为网络或IP限制问题。');
+          }
+
+          pageLoadedSuccessfully = true;
+          this.logger.info('[浏览器] 网页加载成功，且内容正确。');
+          break; // 成功加载，跳出循环
+        } catch (error) {
+          this.logger.warn(`[浏览器] 页面加载尝试 #${attempt} 失败: ${error.message}`);
+          if (attempt < maxNavRetries) {
+            this.logger.info('[浏览器] 等待 5 秒后重试...');
+            await this.page.waitForTimeout(5000); // 重试前等待
+          } else {
+            this.logger.error(`❌ [浏览器] 达到最大页面加载重试次数，启动失败。`);
+            throw error; // 将最终的错误抛出
+          }
+        }
+      }
+      
+      // 如果循环结束后仍未成功加载，则直接抛出错误
+      if (!pageLoadedSuccessfully) {
+          throw new Error('所有页面加载尝试均失败，无法继续。');
+      }
 
       // ==============================
       // 稳健关闭弹窗并延迟点击 "Code"（最终整合版）
