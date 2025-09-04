@@ -369,11 +369,11 @@ class BrowserManager {
       try {
         const codeButton = this.page.getByRole('button', { name: /^Code$/ });
         await codeButton.waitFor({ timeout: 30000 });
+        await codeButton.click({ force: true });
       //   await this.page.waitForTimeout(500);
-      //   await codeButton.click({ force: true });
-        this.logger.info('[浏览器] 已点击 "Code" 按钮');
+        this.logger.info('[浏览器] 已成功强制点击 "Code" 按钮。');
       } catch (err) {
-        this.logger.error('[浏览器] 点击 "Code" 按钮失败', err);
+        this.logger.error('[浏览器] 强制点击 "Code" 按钮依然失败，可能元素不存在', err);
       }
 
       const editorContainerLocator = this.page.locator('div.monaco-editor').first();
