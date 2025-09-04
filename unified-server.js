@@ -269,68 +269,68 @@ class BrowserManager {
         storageState: storageStateObject,
         viewport: { width: 1280, height: 720 },
       });
+
       this.page = await this.context.newPage();
       this.logger.info(`[浏览器] 正在加载账号 ${authIndex} 并访问目标网页...`);
       const targetUrl = 'https://aistudio.google.com/u/0/apps/bundled/blank?showAssistant=true&showCode=true';
-      await this.page.goto(targetUrl, { timeout: 120000, waitUntil: 'networkidle' });
-      this.logger.info('[浏览器] 网页加载完成，正在注入客户端脚本...');
-
-      // ======================================================
-      // 【增强版】带有重试逻辑的页面加载
-      // ======================================================
-      let pageLoadedSuccessfully = false;
-      const maxNavRetries = 3; // 定义最大导航重试次数
-      for (let attempt = 1; attempt <= maxNavRetries; attempt++) {
-        try {
-          this.logger.info(`[浏览器] 页面加载尝试 #${attempt}/${maxNavRetries}...`);
-          await this.page.goto(targetUrl, { timeout: 120000, waitUntil: 'networkidle' });
-          
-          // 增加一个额外的检查，确认页面不是错误页
-          const internalErrorLocator = this.page.locator('text=An internal error occurred');
-          if (await internalErrorLocator.isVisible({ timeout: 5000 }).catch(() => false)) {
-            // 即使加载成功，但内容是错误页，也视为失败
-            throw new Error('页面显示 "An internal error occurred"，可能为网络或IP限制问题。');
-          }
-
-          pageLoadedSuccessfully = true;
-          this.logger.info('[浏览器] 网页加载成功，且内容正确。');
-          break; // 成功加载，跳出循环
-        } catch (error) {
-          this.logger.warn(`[浏览器] 页面加载尝试 #${attempt} 失败: ${error.message}`);
-          if (attempt < maxNavRetries) {
-            this.logger.info('[浏览器] 等待 5 秒后重试...');
-            await this.page.waitForTimeout(5000); // 重试前等待
-          } else {
-            this.logger.error(`❌ [浏览器] 达到最大页面加载重试次数，启动失败。`);
-            throw error; // 将最终的错误抛出
-          }
-        }
-      }
-      
-      // 如果循环结束后仍未成功加载，则直接抛出错误
-      if (!pageLoadedSuccessfully) {
-          throw new Error('所有页面加载尝试均失败，无法继续。');
-      }
-
-      // ==============================
-      // 稳健关闭弹窗并延迟点击 "Code"（最终整合版）
-      // ==============================
       const debugFolder = path.resolve(__dirname, 'debug-screenshots');
       if (!fs.existsSync(debugFolder)) {
         fs.mkdirSync(debugFolder, { recursive: true });
       }
 
-      const maxWaitMs = 15000;   // 最大等待时间 15 秒
-      const checkInterval = 1000; // 每 1 秒检查一次
+      // ======================================================
+      // 页面加载带重试 + 失败截图
+      // ======================================================
+      let pageLoadedSuccessfully = false;
+      const maxNavRetries = 3;
+      for (let attempt = 1; attempt <= maxNavRetries; attempt++) {
+        try {
+          this.logger.info(`[浏览器] 页面加载尝试 #${attempt}/${maxNavRetries}...`);
+          await this.page.goto(targetUrl, { timeout: 120000, waitUntil: 'networkidle' });
+
+          const internalErrorLocator = this.page.locator('text=An internal error occurred');
+          if (await internalErrorLocator.isVisible({ timeout: 5000 }).catch(() => false)) {
+            throw new Error('"An internal error occurred"，视为加载失败');
+          }
+
+          pageLoadedSuccessfully = true;
+          this.logger.info('[浏览器] 网页加载成功，且内容正确。');
+
+          // 成功截图
+          const successPath = path.join(debugFolder, `success-load-${authIndex}-${Date.now()}.png`);
+          await this.page.screenshot({ path: successPath, fullPage: true });
+          this.logger.info(`[调试] 成功加载的页面截图已保存: ${successPath}`);
+          break;
+        } catch (error) {
+          this.logger.warn(`[浏览器] 页面加载尝试 #${attempt} 失败: ${error.message}`);
+          const errorScreenshotPath = path.join(debugFolder, `failed-nav-${authIndex}-${attempt}-${Date.now()}.png`);
+          await this.page.screenshot({ path: errorScreenshotPath, fullPage: true }).catch(() => {});
+          this.logger.info(`[浏览器] 失败截图已保存: ${errorScreenshotPath}`);
+
+          if (attempt < maxNavRetries) {
+            this.logger.info('[浏览器] 等待 5 秒后重试...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          } else {
+            this.logger.error('❌ 达到最大页面加载重试次数，启动失败。');
+            throw error;
+          }
+        }
+      }
+
+      if (!pageLoadedSuccessfully) throw new Error('所有页面加载尝试均失败，无法继续。');
+
+      // ======================================================
+      // 稳健关闭弹窗并延迟点击 "Code"
+      // ======================================================
+      const maxWaitMs = 15000;
+      const checkInterval = 1000;
       let elapsed = 0;
 
       while (elapsed < maxWaitMs) {
         const popup = this.page.locator('text=It\'s time to build');
         if (await popup.isVisible({ timeout: 500 }).catch(() => false)) {
           this.logger.info(`[浏览器] 弹窗检测到，尝试关闭...`);
-          const closeButton = this.page.locator(
-            'button:has-text("✕"), button:has-text("close"), svg[aria-label="Close"]'
-          );
+          const closeButton = this.page.locator('button:has-text("✕"), button:has-text("close"), svg[aria-label="Close"]');
           if (await closeButton.count() > 0) {
             try { await closeButton.first().click({ force: true }); } catch {}
           }
@@ -339,7 +339,7 @@ class BrowserManager {
         } else break;
       }
 
-      // 输出按钮列表 + 截图
+      // 按钮列表 + 调试截图
       const allButtons = await this.page.locator('button').allTextContents();
       this.logger.info(`[调试] 页面按钮列表: ${JSON.stringify(allButtons, null, 2)}`);
       const debugPath = path.join(debugFolder, `debug-buttons-${Date.now()}.png`);
@@ -356,7 +356,6 @@ class BrowserManager {
       } catch (err) {
         this.logger.error('[浏览器] 点击 "Code" 按钮失败', err);
       }
-
 
       const editorContainerLocator = this.page.locator('div.monaco-editor').first();
 
