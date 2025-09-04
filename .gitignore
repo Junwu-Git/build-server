@@ -1,0 +1,10 @@
+# .gitignore
+
+# 忽略 Node.js 依赖目录
+node_modules
+
+# 忽略包含环境变量和机密信息的文件
+.env
+
+# 忽略本地生成的调试文件
+debug-screenshots

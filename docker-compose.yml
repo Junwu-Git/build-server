@@ -1,0 +1,28 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  build-server:
+    image: ghcr.io/junwu-git/build-server:latest
+    container_name: build-server
+    restart: on-failure:5
+    
+    environment:
+      - TARGET_UID=${UID}
+      - TARGET_GID=${GID}
+      - API_KEYS=${API_KEYS} 
+      - STREAMING_MODE=fake
+      - FAILURE_THRESHOLD=0
+      - MAX_RETRIES=3
+      - RETRY_DELAY=3000
+      - IMMEDIATE_SWITCH_STATUS_CODES=429,503
+      - TZ=Asia/Shanghai
+      
+    ports:
+      - "8889:8889"
+      
+    volumes:
+      - ./auth:/home/user/auth
+      - ./debug-screenshots:/home/user/debug-screenshots
+      
