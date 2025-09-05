@@ -3,11 +3,17 @@ name: Docker Image CI
 on:
   push:
     branches:
-      - 'main' # main 分支推送代码时触发 (主要用于更新工作流文件本身，或后续合并到 main 的提交)
-      - 'test' # test 分支推送代码时触发 (用于测试镜像发布)
+      - 'main'
+      - 'test'
     tags:
-      - 'v*.*.*' # Git Tag 推送时触发 (用于正式版本发布)
+      - 'v*.*.*'
   workflow_dispatch: # 手动触发
+    inputs:
+      branch: # 允许用户手动输入要构建的分支名
+        description: 'Branch to build (e.g., main, test)'
+        required: false
+        default: ${{ github.ref_name }} # 默认当前分支
+
 
 jobs:
   build-and-push:
@@ -44,6 +50,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=main,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=raw,value=test,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/test' }}
+            type=raw,value=${{ github.event.inputs.branch || 'manual' }},enable=${{ github.event_name == 'workflow_dispatch' }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Set up Docker Buildx
