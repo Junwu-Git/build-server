@@ -4,17 +4,9 @@ FROM node:18 AS build
 # 设置工作目录
 WORKDIR /home/node/app
 
-# 复制 package.json 和 package-lock.json
-COPY package*.json ./
+# 切换到 root 以安装系统依赖
+USER root
 
-# 安装所有依赖，包括 devDependencies 用于构建和 Playwright 下载
-RUN npm install
-
-# 安装 Playwright 浏览器及其依赖
-# 这会下载浏览器到 /home/node/.cache/ms-playwright
-RUN npx playwright install --with-deps chromium
-
-# 下载 Playwright 浏览器以供下一阶段使用
 # 为 Playwright 安装 Alpine Linux 系统依赖
 RUN apk add --no-cache \
     udev \
@@ -40,6 +32,21 @@ RUN apk add --no-cache \
     alsa-lib \
     at-spi2-atk \
     atk
+
+# 切换回非 root 用户以进行后续操作
+USER node
+
+# 复制 package.json 和 package-lock.json
+COPY --chown=node:node package*.json ./
+
+# 安装所有依赖，包括 devDependencies 用于构建和 Playwright 下载
+RUN npm install
+
+# 安装 Playwright 浏览器及其依赖
+# 这会下载浏览器到 /home/node/.cache/ms-playwright
+RUN npx playwright install --with-deps chromium
+
+# 下载 Playwright 浏览器以供下一阶段使用
 RUN npx playwright install firefox
 
 # 复制应用源代码
