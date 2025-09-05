@@ -1,53 +1,75 @@
-一个用于aistudio的build app反代的项目，可使用aistudio的模型，强制依赖于https://github.com/daijro/camoufox 项目
+# AI Studio Build App Reverse Proxy
 
-专注于docker部署，在主仓库的基础上，使用AI进行了个人化定制，所有修改代码均来自AI，请酌情使用，概不负责。
+这是一个为 Google AI Studio 的 "Build App" 功能设计的反向代理项目。它允许您通过 API 的方式，调用和使用在 AI Studio 中构建的应用模型。
 
-相较于主项目：
+本项目强制依赖于 [daijro/camoufox](https://github.com/daijro/camoufox) 项目提供的浏览器环境。
 
-新增功能 (Added)
+---
 
-自动化 CI/CD:
+## 🚀 项目特点
 
-新增了基于 GitHub Actions 的自动化 CI/CD 流程 (.github/workflows/docker-image.yml)。
+本项目专注于 **Docker 容器化部署**，并在原项目的基础上，利用 AI 进行了深度定制和功能增强，旨在提供一个**更健壮、更稳定、更易于维护**的生产级解决方案。
 
-现在，只有当推送 Git 标签 (例如 v1.0.1) 时，才会触发新版 Docker 镜像的构建与发布，有效解决了版本混乱的问题，使版本管理清晰可控。
+> **免责声明**: 本仓库的所有代码修改均由 AI 生成，旨在探索自动化编程与应用优化的可能性。请在充分理解代码功能和潜在风险的基础上酌情使用，作者对可能产生的任何问题概不负责。
 
-标准化的部署方案:
+---
 
-引入了 Docker Compose (docker-compose.yml) 作为官方推荐的部署方式。
+###  🚀Quick Start / 快速开始
 
-通过 entrypoint.sh 脚本，在容器启动时动态修复文件权限，从根本上解决了因主机与容器用户ID不匹配而导致的挂载卷写入失败问题。
+要快速启动并运行此项目，请遵循以下步骤。
 
-账户熔断机制:
+1.  📝 **准备 `docker-compose.yml` 文件**:
+    在项目根目录创建 `docker-compose.yml`，并粘贴以下内容：
+    ```yaml
+    version: '3.8'
 
-在 RequestHandler 中新增了账户全循环失败熔断机制。当所有备用账号轮换一遍后问题依旧存在，系统将停止自动切换，防止因无限重启浏览器而耗尽服务器资源。
+    services:
+      build-server:
+        image: ghcr.io/junwu-git/build-server:latest
+        container_name: build-server
+        restart: on-failure:5
+        ports:
+          - "8889:8889"
+        env_file:
+          - .env
+        deploy:
+          resources:
+            limits:
+              memory: 1024M          
+        volumes:
+          - ./auth:/home/user/auth
+          - ./debug-screenshots:/home/user/debug-screenshots
+    ```
 
-强大的诊断与调试能力:
+2.  🔑 **准备 `.env` 文件**:
+    在项目根目录创建 `.env` 文件，并粘贴以下内容。请**务必替换 `API_KEYS`** 为您的实际密钥。
+    ```env
+    # User and Group IDs for permission handling.
+    # This is used by entrypoint.sh script to match your host user.
+    # Find these using 'id -u' and 'id -g' on your host.
+    TARGET_UID=YOUR_HOST_UID_HERE # 例如 1001
+    TARGET_GID=YOUR_HOST_GID_HERE # 例如 1001
 
-在浏览器启动的每一个关键阶段（页面加载成功/失败、弹窗清理后、核心交互前）都会自动生成调试截图，并保存到 debug-screenshots 目录。
+    # --- Your Secrets (Required) ---
+    API_KEYS=your_secret_api_key_here
 
-在关键操作前，会自动记录并打印当前页面所有可见的按钮列表，为问题排查提供了无可辩驳的现场证据。
+    # --- Optional Configurations ---
+    FAILURE_THRESHOLD=0
+    MAX_RETRIES=3
+    RETRY_DELAY=3000
+    IMMEDIATE_SWITCH_STATUS_CODES=429,503
+    STREAMING_MODE=fake
+    ```
 
-功能变更与优化 (Changed & Improved)
+3.  📁 **创建本地目录**:
+    确保项目根目录下存在 `auth` 和 `debug-screenshots` 目录，并将您的 `auth-X.json` 文件放入 `auth` 目录。
+    为了避免权限问题，建议手动创建 `debug-screenshots` 目录，并赋予其写入权限：
+    ```bash
+    mkdir auth debug-screenshots
+    chmod 777 debug-screenshots # 确保所有用户可读写，避免权限问题
+    ```
 
-浏览器启动逻辑 (核心重构):
-
-彻底重构了浏览器启动后的页面交互逻辑，以应对 Google AI Studio 前端的复杂性和不确定性。
-
-“唤醒”与稳定：在页面加载后，增加了一个长达10秒的无条件等待，确保所有前端框架和异步脚本有充足的时间完成初始化。
-
-“耐心”的弹窗清理：实现了一个持续15秒的循环“清扫”机制，能够反复、可靠地关闭所有已知的弹窗（如 "Got it" 和 "✕"），彻底解决了因UI渲染延迟而导致弹窗清理失败的问题。
-
-“双保险”核心交互：在所有等待和清理完成后，对 "Code" 按钮的点击采用了先 waitFor、后 force: true 的双保险策略，确保了在页面绝对稳定后的最终操作成功率。
-
-页面加载弹性:
-
-page.goto 页面加载步骤现在拥有最多3次的自动重试机制，并能在每次失败时生成快照，有效抵抗暂时的网络波动。
-
-Docker 镜像优化:
-
-基础镜像切换为 node:18-slim，并优化了 Dockerfile 中的缓存清理步骤，显著减小了最终镜像的体积。
-
-部署安全性增强:
-
-通过引入 .env 文件和 .gitignore，实现了机密信息（如 API_KEYS）与配置文件的完全分离，避免了将敏感信息提交到版本控制中，遵循了安全最佳实践。
+5.  🚀 **启动服务**:
+    ```bash
+    docker-compose up -d
+    ```
