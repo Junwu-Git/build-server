@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 
 // --- 配置常量 ---
-const browserExecutablePath = path.join(__dirname, 'camoufox', 'camoufox.exe');
 const VALIDATION_LINE_THRESHOLD = 200; // 定义验证的行数阈值
 const AUTH_DIR = 'auth'; // 格式化认证文件的文件夹
 const SINGLE_LINE_AUTH_DIR = 'single-line-auth'; // 单行认证文件的文件夹
@@ -57,17 +56,16 @@ function getNextAuthIndex() {
   const newSingleLineAuthFileName = `auth-single-${newIndex}.json`;
 
   console.log(`▶️  准备为账户 #${newIndex} 创建新的认证文件...`);
-  console.log(`▶️  启动浏览器: ${browserExecutablePath}`);
+  console.log(`▶️  启动浏览器...`);
 
   const browser = await firefox.launch({
     headless: false,
-    executablePath: browserExecutablePath,
   });
 
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  console.log('\n--- 请在新打开的 Camoufox 窗口中完成以下操作 ---');
+  console.log('\n--- 请在新打开的 浏览器 窗口中完成以下操作 ---');
   console.log('1. 浏览器将打开 Google AI Studio，请在弹出的页面中【完全登录】您的Google账户。');
   console.log('2. 登录成功并看到 AI Studio 界面后，请不要关闭浏览器窗口。');
   console.log('3. 回到这个终端，然后按 "Enter" 键继续...');
