@@ -15,13 +15,13 @@ FROM node:18-bullseye-slim
 # 我们只在安装时需要 wget，用完后即删除，以保持镜像干净。
 RUN apt-get update && \
     apt-get install -y --no-install-recommends wget ca-certificates && \
-    npx playwright install-deps && \
+    npx playwright install-deps firefox && \
     apt-get purge -y wget ca-certificates && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
 # 从第一阶段（playwright_source）精确地复制预装好的浏览器到我们的最终镜像中。
-COPY --from=playwright_source /ms-playwright/firefox /ms-playwright/firefox
+COPY --from=playwright_source /ms-playwright/firefox-* /ms-playwright/
 
 # 设置环境变量，告诉 Playwright 在我们指定的新位置寻找浏览器。
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
