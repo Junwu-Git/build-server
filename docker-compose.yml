@@ -4,7 +4,7 @@ services:
   biu_biu_biu:
     image: ghcr.io/junwu-git/biu_biu_biu:latest
     container_name: biu_biu_biu
-    restart: on-failure:5
+    restart: unless-stopped
     ports:
       - "8889:8889"
     env_file:
@@ -12,10 +12,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1024M          
+          memory: 1024M
     volumes:
-      - ./auth:/home/user/auth
-      - ./debug-screenshots:/home/user/debug-screenshots
+      - ./auth:/home/node/app/auth
+      - ./debug-screenshots:/home/node/app/debug-screenshots
     networks:
       - internal-redis-network # 确保 biu_biu_biu 可以访问到 redis-server
 

@@ -1,8 +1,28 @@
+# ---- Build Stage ----
+FROM node:18 AS build
+
+# 设置工作目录
+WORKDIR /home/node/app
+
+# 复制 package.json 和 package-lock.json
+COPY package*.json ./
+
+# 安装所有依赖，包括 devDependencies 用于构建和 Playwright 下载
+RUN npm install
+
+# 安装 Playwright 浏览器及其依赖
+# 这会下载浏览器到 /home/node/.cache/ms-playwright
+RUN npx playwright install --with-deps chromium
+
+# 复制应用源代码
+COPY . .
+
+# ---- Production Stage ----
 FROM node:18-slim
 
-# 安装必要的系统依赖，并新增 gosu 用于权限切换
+# 为 Playwright 安装必要的运行时依赖
+# 这些是 --with-deps 无法自动安装的运行时依赖
 RUN apt-get update && apt-get install -y \
-    wget \
     fonts-liberation \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -22,32 +42,43 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libxtst6 \
     xvfb \
-    gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建一个默认的 user 用户 (UID/GID 在启动时会被 entrypoint 脚本修改)
-RUN useradd -m -s /bin/bash user
-WORKDIR /home/user
+# 创建一个非 root 用户和组
+RUN addgroup --system --gid 1001 node && \
+    adduser --system --uid 1001 --ingroup node node
 
-# 安装依赖
-COPY package*.json ./
-RUN npm install
+# 设置工作目录
+WORKDIR /home/node/app
 
-# 复制应用文件，包括 entrypoint 脚本
-COPY entrypoint.sh /usr/local/bin/
+# 从构建阶段复制生产依赖
+COPY --from=build /home/node/app/node_modules ./node_modules
+
+# 从构建阶段复制 Playwright 的浏览器缓存
+COPY --from=build /home/node/.cache/ms-playwright/ /home/node/.cache/ms-playwright/
+
+# 复制应用文件
 COPY unified-server.js dark-browser.js ./
 COPY auth/ ./auth/
-COPY camoufox-linux/ ./camoufox-linux/
+COPY lib/ ./lib/
+COPY dashboard/ ./dashboard/
+COPY entrypoint.sh /usr/local/bin/
 
-# 仅设置可执行权限，所有权将在 entrypoint 脚本中动态修复
-RUN chmod +x /usr/local/bin/entrypoint.sh && \
-    chmod +x /home/user/camoufox-linux/camoufox
+# 确保 Playwright 知道在哪里找到浏览器
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
 
-# 暴露端口作为镜像的元数据，这是一个最佳实践
+# 切换到非 root 用户
+USER node
+
+# 修复文件所有权
+RUN chown -R node:node /home/node/app && \
+    chmod +x /usr/local/bin/entrypoint.sh
+
+# 暴露端口
 EXPOSE 8889
 
-# 设置 Entrypoint，容器启动时会首先执行这个脚本
-ENTRYPOINT ["entrypoint.sh"]
+# 设置入口点
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
-# 定义默认命令，它会作为参数传递给 Entrypoint
+# 默认命令
 CMD ["node", "unified-server.js"]

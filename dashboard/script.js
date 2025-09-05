@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const addAccountBtn = document.getElementById('addAccountBtn');
     const configForm = document.getElementById('configForm');
     const toastEl = document.getElementById('toast');
+    const addAccountModal = document.getElementById('addAccountModal');
+    const closeButton = document.querySelector('.close-button');
+    const addAccountForm = document.getElementById('addAccountForm');
 
     function getAuthHeaders(hasBody = false) {
         const headers = {
@@ -124,17 +127,49 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     
         addAccountBtn.addEventListener('click', () => {
-            const index = prompt("为新的临时账号输入一个唯一的数字索引：");
-            if (!index || isNaN(parseInt(index))) { if(index !== null) alert("索引无效。"); return; }
-            const authDataStr = prompt("请输入单行压缩后的Cookie内容:");
-            if (!authDataStr) return;
+            addAccountModal.style.display = 'block';
+        });
+
+        closeButton.addEventListener('click', () => {
+            addAccountModal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target === addAccountModal) {
+                addAccountModal.style.display = 'none';
+            }
+        });
+
+        addAccountForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const index = document.getElementById('accountIndex').value;
+            const authDataStr = document.getElementById('accountAuthData').value;
+            if (!index || isNaN(parseInt(index))) {
+                showToast("索引无效。", true);
+                return;
+            }
             let authData;
-            try { authData = JSON.parse(authDataStr); } catch { alert("Cookie JSON格式无效。"); return; }
-            
-            fetch(`${API_BASE}/accounts`, { method: 'POST', headers: getAuthHeaders(true), body: JSON.stringify({ index: parseInt(index), authData }) })
-                .then(res => res.json().then(data => ({ ok: res.ok, data }))).then(({ok, data}) => {
+            try {
+                authData = JSON.parse(authDataStr);
+            } catch {
+                showToast("Cookie JSON格式无效。", true);
+                return;
+            }
+
+            fetch(`${API_BASE}/accounts`, {
+                method: 'POST',
+                headers: getAuthHeaders(true),
+                body: JSON.stringify({ index: parseInt(index), authData })
+            })
+            .then(res => res.json().then(data => ({ ok: res.ok, data })))
+            .then(({ ok, data }) => {
                 if (!ok) throw new Error(data.message);
-                showToast(data.message); fetchData(); }).catch(err => showToast(err.message, true));
+                showToast(data.message);
+                fetchData();
+                addAccountModal.style.display = 'none';
+                addAccountForm.reset();
+            })
+            .catch(err => showToast(err.message, true));
         });
     
         accountPoolEl.addEventListener('click', e => {

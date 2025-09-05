@@ -8,3 +8,5 @@ node_modules
 
 # 忽略本地生成的调试文件
 debug-screenshots
+
+auth-*.json
