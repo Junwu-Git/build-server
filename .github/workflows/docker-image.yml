@@ -47,8 +47,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          # 【已移除】不再指定 platforms，让它只构建默认的 amd64
-          # 【新增】禁用 provenance 和 sbom，确保生成传统的、兼容性最强的镜像格式
           provenance: false
           sbom: false
           push: true
