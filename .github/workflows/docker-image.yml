@@ -37,7 +37,6 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            # 【建议新增】始终创建一个 latest 标签，指向最新的版本发布
             type=raw,value=latest
 
       - name: Set up Docker Buildx
