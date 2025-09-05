@@ -2,13 +2,29 @@
 .git
 .gitignore
 
-# Node
-node_modules
-npm-debug.log
-
 # Docker
-.dockerignore
 Dockerfile
+.dockerignore
 
-# VSCode
+# Node.js
+node_modules
+npm-debug.log*
+yarn-error.log
+
+# Editor / OS specific
 .vscode
+.idea
+*.swp
+*~
+.DS_Store
+
+# Local environment files
+.env
+
+# Local browser cache (if any)
+camoufox/
+ms-playwright/
+
+# Build artifacts
+build/
+dist/
