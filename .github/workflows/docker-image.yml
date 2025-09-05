@@ -2,9 +2,12 @@ name: Docker Image CI
 
 on:
   push:
+    branches:
+      - 'main' # main 分支推送代码时触发 (主要用于更新工作流文件本身，或后续合并到 main 的提交)
+      - 'test' # 【新增】test 分支推送代码时触发 (用于测试镜像发布)
     tags:
-      - 'v*.*.*'
-  workflow_dispatch:
+      - 'v*.*.*' # Git Tag 推送时触发 (用于正式版本发布)
+  workflow_dispatch: # 手动触发
 
 jobs:
   build-and-push:
@@ -34,10 +37,17 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # 【关键】动态生成标签的逻辑：
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            # 1. 只有推送 Git 标签时，才生成语义化版本标签和 :latest 标签
+            type=semver,pattern={{version}},enable={{is_tag}}
+            type=semver,pattern={{major}}.{{minor}},enable={{is_tag}}
+            type=raw,value=latest,enable={{is_tag}}
+            # 2. 只有推送 'main' 分支代码时，才生成 :main 标签
+            type=raw,value=main,enable={{branch == 'main'}}
+            # 3. 只有推送 'test' 分支代码时，才生成 :test 标签
+            type=raw,value=test,enable={{branch == 'test'}}
+          labels: ${{ steps.meta.outputs.labels }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
