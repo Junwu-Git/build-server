@@ -63,14 +63,14 @@ document.addEventListener('DOMContentLoaded', () => {
             totalCallsEl.textContent = data.stats.totalCalls;
             
             accountCallsEl.innerHTML = '';
-            const sortedAccounts = Object.entries(data.stats.accountCalls).sort((a,b) => parseInt(a) - parseInt(b));
+            const sortedAccounts = Object.entries(data.stats.accountCalls).sort((a, b) => parseInt(a) - parseInt(b));
             const callsUl = document.createElement('ul');
             callsUl.className = 'account-list';
             for (const [index, stats] of sortedAccounts) {
                 const li = document.createElement('li');
                 const isCurrent = parseInt(index, 10) === data.auth.currentAuthIndex;
                 let modelStatsHtml = '<ul class="model-stats-list">';
-                const sortedModels = Object.entries(stats.models).sort((a,b) => b - a);
+                const sortedModels = Object.entries(stats.models).sort((a, b) => b - a);
                 sortedModels.length > 0 ? sortedModels.forEach(([model, count]) => { modelStatsHtml += `<li><span>${model}:</span> <strong>${count}</strong></li>`; }) : modelStatsHtml += '<li>无模型调用记录</li>';
                 modelStatsHtml += '</ul>';
                 li.innerHTML = `<details><summary><span class="${isCurrent ? 'current' : ''}">账号 ${index}</span><strong>总计: ${stats.total}</strong></summary>${modelStatsHtml}</details>`;
