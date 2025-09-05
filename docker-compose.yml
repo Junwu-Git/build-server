@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  build-server:
-    image: ghcr.io/junwu-git/build-server:latest
-    container_name: build-server
+  biu_biu_biu:
+    image: ghcr.io/junwu-git/biu_biu_biu:latest
+    container_name: biu_biu_biu
     restart: on-failure:5
     ports:
       - "8889:8889"
@@ -17,7 +17,7 @@ services:
       - ./auth:/home/user/auth
       - ./debug-screenshots:/home/user/debug-screenshots
     networks:
-      - internal-redis-network # 确保 build-server 可以访问到 redis-server
+      - internal-redis-network # 确保 biu_biu_biu 可以访问到 redis-server
 
   # Redis 服务
   redis-server:
@@ -28,10 +28,10 @@ services:
     volumes:
       - ./data:/data # 数据持久化
     networks:
-      - internal-redis-network # 连接到内部网络，与 build-server 通信
+      - internal-redis-network # 连接到内部网络，与 biu_biu_biu 通信
     # ports: # Redis 通常不需要对外暴露端口，但如果需要，可以取消注释
     #   - "6379:6379" 
 
 networks:
-  internal-redis-network: # 内部网络，用于 build-server 和 redis-server 通信
+  internal-redis-network: # 内部网络，用于 biu_biu_biu 和 redis-server 通信
     driver: bridge
