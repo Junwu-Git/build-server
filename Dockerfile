@@ -15,6 +15,31 @@ RUN npm install
 RUN npx playwright install --with-deps chromium
 
 # 下载 Playwright 浏览器以供下一阶段使用
+# 为 Playwright 安装 Alpine Linux 系统依赖
+RUN apk add --no-cache \
+    udev \
+    ttf-freefont \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    xvfb \
+    libxcomposite \
+    libxcursor \
+    libxdamage \
+    libxext \
+    libxfixes \
+    libxi \
+    libxrandr \
+    libxrender \
+    libxtst \
+    cups-libs \
+    dbus-libs \
+    expat \
+    pango \
+    alsa-lib \
+    at-spi2-atk \
+    atk
 RUN npx playwright install firefox
 
 # 复制应用源代码
