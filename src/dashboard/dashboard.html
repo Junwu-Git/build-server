@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服务器仪表盘</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body data-theme="dark">
+    <div class="top-banner">注意: 此面板中添加的账号和修改的变量均是临时的，重启后会丢失</div>
+    <main class="container">
+        <h1>🐢 服务器仪表盘</h1>
+        <div class="grid">
+            <article>
+                <h2>服务器状态</h2>
+                <div class="status-grid">
+                    <strong>运行时间:</strong> <span id="uptime">--</span>
+                    <strong>浏览器:</strong> <span id="browserConnected">--</span>
+                    <strong>认证模式:</strong> <span id="authMode">--</span>
+                    <strong>API密钥认证:</strong> <span id="apiKeyAuth">--</span>
+                    <strong>调试模式:</strong> <span id="debugMode">--</span>
+                    <strong>API总调用次数:</strong> <span id="totalCalls">0</span>
+                </div>
+            </article>
+            <article>
+                <h2>调用统计</h2>
+                <div id="accountCalls" class="scrollable-list"></div>
+            </article>
+            
+            <article>
+                <h2>账号管理</h2>
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                    <button id="switchAccountBtn">切换到下一个账号</button>
+                    <button id="addAccountBtn">添加临时账号</button>
+                </div>
+                <h3>账号池</h3>
+                <div id="accountPool" class="scrollable-list"></div>
+            </article>
+            
+            <article>
+                <h2>实时配置</h2>
+                <form id="configForm">
+                    <div class="form-group">
+                      <label>流式模式</label>
+                      <div class="switch-field">
+                        <input type="radio" id="streamingMode_fake" name="streamingMode" value="fake" />
+                        <label for="streamingMode_fake">Fake</label>
+                        <input type="radio" id="streamingMode_real" name="streamingMode" value="real" checked/>
+                        <label for="streamingMode_real">Real</label>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="configFailureThreshold">几次失败后切换账号 (0为禁用)</label>
+                        <input type="number" id="configFailureThreshold" name="failureThreshold">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="configMaxRetries">单次请求内部重试次数</label>
+                        <input type="number" id="configMaxRetries" name="maxRetries">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="configRetryDelay">重试间隔 (毫秒)</label>
+                        <input type="number" id="configRetryDelay" name="retryDelay">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="configImmediateSwitchStatusCodes">立即切换的状态码 (逗号分隔)</label>
+                        <input type="text" id="configImmediateSwitchStatusCodes" name="immediateSwitchStatusCodes">
+                    </div>
+                    
+                    <button type="submit">应用临时更改</button>
+                </form>
+            </article>
+        </div>
+    </main>
+    <div id="toast" class="toast"></div>
+    <script src="dashboard.js"></script>
+</body>
+</html>

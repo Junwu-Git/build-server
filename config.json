@@ -29,6 +29,8 @@
   "_immediateSwitchStatusCodes_comment": "用于设置立即切换账号的报错代码，不受报错次数限制影响，可以包含一个或多个用英文逗号分隔的状态码。环境变量: IMMEDIATE_SWITCH_STATUS_CODES",
 
   "debugMode": false,
-  "_debugMode_comment": "调试模式，true代表开启，false代表关闭。环境变量: DEBUG_MODE"
+  "_debugMode_comment": "调试模式，true代表开启，false代表关闭。环境变量: DEBUG_MODE",
 
+  "targetUrl": "https://aistudio.google.com/u/0/apps/bundled/blank?showAssistant=true&showCode=true",
+  "_targetUrl_comment": "浏览器启动后访问的目标URL。环境变量: TARGET_URL"
 }
