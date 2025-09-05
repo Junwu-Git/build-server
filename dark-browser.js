@@ -121,59 +121,61 @@ class RequestProcessor {
       }
     };
 
-    const attemptPromise = new Promise(async (resolve, reject) => {
-      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-        try {
-          Logger.output(
-            `执行请求 (尝试 ${attempt}/${this.maxRetries}):`,
-            requestSpec.method,
-            requestSpec.path
-          );
-
-          const requestUrl = this._constructUrl(requestSpec);
-          const requestConfig = this._buildRequestConfig(
-            requestSpec,
-            abortController.signal
-          );
-
-          const response = await fetch(requestUrl, requestConfig);
-
-          if (!response.ok) {
-            const errorBody = await response.text();
-            const error = new Error(
-              `Google API返回错误: ${response.status} ${response.statusText} ${errorBody}`
-            );
-            error.status = response.status;
-            throw error;
-          }
-
-          // 请求成功，将response对象传递出去
-          resolve(response);
-          return;
-        } catch (error) {
-          if (error.name === "AbortError") {
-            reject(error); // 如果是超时导致的终止，直接拒绝
-            return;
-          }
-          const isNetworkError = error.message.includes("Failed to fetch");
-          const isRetryableServerError =
-            error.status && [500, 502, 503, 504].includes(error.status);
-          if (
-            (isNetworkError || isRetryableServerError) &&
-            attempt < this.maxRetries
-          ) {
+    const attemptPromise = new Promise((resolve, reject) => {
+      (async () => {
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+          try {
             Logger.output(
-              `❌ 请求尝试 #${attempt} 失败: ${error.message.substring(0, 200)}`
+              `执行请求 (尝试 ${attempt}/${this.maxRetries}):`,
+              requestSpec.method,
+              requestSpec.path
             );
-            Logger.output(`将在 ${this.retryDelay / 1000}秒后重试...`);
-            await new Promise((r) => setTimeout(r, this.retryDelay));
-            continue;
-          } else {
-            reject(error);
+
+            const requestUrl = this._constructUrl(requestSpec);
+            const requestConfig = this._buildRequestConfig(
+              requestSpec,
+              abortController.signal
+            );
+
+            const response = await fetch(requestUrl, requestConfig);
+
+            if (!response.ok) {
+              const errorBody = await response.text();
+              const error = new Error(
+                `Google API返回错误: ${response.status} ${response.statusText} ${errorBody}`
+              );
+              error.status = response.status;
+              throw error;
+            }
+
+            // 请求成功，将response对象传递出去
+            resolve(response);
             return;
+          } catch (error) {
+            if (error.name === "AbortError") {
+              reject(error); // 如果是超时导致的终止，直接拒绝
+              return;
+            }
+            const isNetworkError = error.message.includes("Failed to fetch");
+            const isRetryableServerError =
+              error.status && [500, 502, 503, 504].includes(error.status);
+            if (
+              (isNetworkError || isRetryableServerError) &&
+              attempt < this.maxRetries
+            ) {
+              Logger.output(
+                `❌ 请求尝试 #${attempt} 失败: ${error.message.substring(0, 200)}`
+              );
+              Logger.output(`将在 ${this.retryDelay / 1000}秒后重试...`);
+              await new Promise((r) => setTimeout(r, this.retryDelay));
+              continue;
+            } else {
+              reject(error);
+              return;
+            }
           }
         }
-      }
+      })();
     });
 
     // 将“请求重试”和“空闲超时”进行赛跑
@@ -185,7 +187,7 @@ class RequestProcessor {
 
   // --- constructUrl, generateRandomString, buildRequestConfig, sanitizeHeaders 等其他方法保持不变 ---
   cancelAllOperations() {
-    this.activeOperations.forEach((controller, id) => controller.abort());
+    this.activeOperations.forEach((controller) => controller.abort());
     this.activeOperations.clear();
   }
   _constructUrl(requestSpec) {
@@ -238,7 +240,7 @@ class RequestProcessor {
           Logger.output("已向提示文本末尾添加伪装字符串。");
         }
         config.body = JSON.stringify(bodyObj);
-      } catch (e) {
+      } catch {
         config.body = requestSpec.body;
       }
     }
@@ -356,7 +358,7 @@ class ProxySystem extends EventTarget {
                 ) {
                   finalFinishReason = jsonData.candidates[0].finishReason;
                 }
-              } catch (e) {
+              } catch {
                 /* 忽略JSON解析错误 */
               }
             }
@@ -392,7 +394,7 @@ class ProxySystem extends EventTarget {
           } else {
             logMessage = `🤔 响应结束异常，原因: ${finishReason || "未知"}`;
           }
-        } catch (e) {
+        } catch {
           logMessage = `⚠️ 响应非JSON格式`;
         }
         Logger.output(logMessage);

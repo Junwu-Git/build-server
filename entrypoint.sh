@@ -35,5 +35,5 @@ chown -R user:user /home/user/debug-screenshots
 echo "权限修复完成。"
 
 # 最后，以 'user' 用户的身份执行传递给脚本的命令（即 CMD）
-echo "切换到 'user' 并执行主命令: $@"
+echo "切换到 'user' 并执行主命令: $*"
 exec gosu user "$@"

@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const authDataStr = prompt("请输入单行压缩后的Cookie内容:");
             if (!authDataStr) return;
             let authData;
-            try { authData = JSON.parse(authDataStr); } catch(e) { alert("Cookie JSON格式无效。"); return; }
+            try { authData = JSON.parse(authDataStr); } catch { alert("Cookie JSON格式无效。"); return; }
             
             fetch(`${API_BASE}/accounts`, { method: 'POST', headers: getAuthHeaders(true), body: JSON.stringify({ index: parseInt(index), authData }) })
                 .then(res => res.json().then(data => ({ ok: res.ok, data }))).then(({ok, data}) => {
