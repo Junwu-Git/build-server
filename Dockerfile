@@ -44,9 +44,6 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建一个非 root 用户和组
-RUN addgroup --system --gid 1001 node && \
-    adduser --system --uid 1001 --ingroup node node
 
 # 设置工作目录
 WORKDIR /home/node/app
