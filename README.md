@@ -2,7 +2,7 @@
 
 这是一个为 Google AI Studio 的 "Build App" 功能设计的反向代理项目。它允许您通过 API 的方式，调用和使用在 AI Studio 中构建的应用模型。
 
-本项目强制依赖于 [daijro/camoufox](https://github.com/daijro/camoufox) 项目提供的浏览器环境。
+本项目使用 Playwright 自动化浏览器操作。
 
 ---
 
@@ -18,7 +18,14 @@
 
 要快速启动并运行此项目，请遵循以下步骤。
 
-1.  📝 **准备 `docker-compose.yml` 文件**:
+1.  **[重要] 安装浏览器依赖**:
+    本项目依赖 Playwright 来控制一个兼容的 Firefox 浏览器。在执行任何其他操作之前，请先在您的项目根目录下运行以下命令来下载所需的浏览器版本：
+    ```bash
+    npx playwright install firefox
+    ```
+    > **注意**: 此步骤仅需在首次设置或 Playwright 更新后执行一次。
+
+2.  📝 **准备 `docker-compose.yml` 文件**:
     在项目根目录创建 `docker-compose.yml`，并粘贴以下内容：
     ```yaml
     version: '3.8'
@@ -41,7 +48,7 @@
           - ./debug-screenshots:/home/user/debug-screenshots
     ```
 
-2.  🔑 **准备 `.env` 文件**:
+3.  🔑 **准备 `.env` 文件**:
     在项目根目录创建 `.env` 文件，并粘贴以下内容。请**务必替换 `API_KEYS`** 为您的实际密钥。
     ```env
     # User and Group IDs for permission handling.
@@ -61,15 +68,15 @@
     STREAMING_MODE=fake
     ```
 
-3.  📁 **创建本地目录与准备认证文件**:
+4.  📁 **创建本地目录与准备认证文件**:
     在项目根目录中，创建 `auth` 和 `debug-screenshots` 目录。
     ```bash
     mkdir auth debug-screenshots
     chmod 777 debug-screenshots # 确保容器有权限写入调试截图
     ```
-    本项目依赖于 `camoufox` 生成的浏览器认证文件。请运行 `camoufox` 项目，完成登录后，将其生成的 `auth-X.json`（`X` 通常是数字）文件复制到本项目的 `auth` 目录中。
+    本项目依赖于浏览器认证文件。您可以通过运行 `save-auth.js` 脚本来生成这些文件。完成登录后，生成的 `auth-X.json` 文件会自动保存在 `auth` 目录中。
 
-4.  🚀 **启动服务**:
+5.  🚀 **启动服务**:
     ```bash
     docker-compose up -d
     ```

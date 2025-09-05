@@ -1,3 +1,4 @@
+require('dotenv').config();
 const ProxyServerSystem = require('./lib/proxy-system');
 
 let serverSystem;
