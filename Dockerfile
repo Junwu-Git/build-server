@@ -14,6 +14,9 @@ RUN npm install
 # 这会下载浏览器到 /home/node/.cache/ms-playwright
 RUN npx playwright install --with-deps chromium
 
+# 下载 Playwright 浏览器以供下一阶段使用
+RUN npx playwright install firefox
+
 # 复制应用源代码
 COPY . .
 
