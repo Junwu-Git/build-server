@@ -3,17 +3,16 @@ name: Docker Image CI
 on:
   push:
     branches:
-      - 'main'
-      - 'test'
+      - 'main' # main 分支推送代码时触发
+      - 'test' # test 分支推送代码时触发
     tags:
-      - 'v*.*.*'
+      - 'v*.*.*' # Git Tag 推送时触发
   workflow_dispatch: # 手动触发
     inputs:
       branch: # 允许用户手动输入要构建的分支名
         description: 'Branch to build (e.g., main, test)'
         required: false
-        default: ${{ github.ref_name }} # 默认当前分支
-
+        default: 'main' # 【关键修正】将默认值改为静态字符串 'main'
 
 jobs:
   build-and-push:
@@ -43,13 +42,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          # 关键修正：动态生成标签的逻辑，确保 enable 属性语法正确，并修正缩进
           tags: |
             type=semver,pattern={{version}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=latest,enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=main,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=raw,value=test,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/test' }}
+            # 关键修正：手动触发时，从输入中获取分支名，并确保 enable 属性语法正确
             type=raw,value=${{ github.event.inputs.branch || 'manual' }},enable=${{ github.event_name == 'workflow_dispatch' }}
           labels: ${{ steps.meta.outputs.labels }}
 
