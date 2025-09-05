@@ -2,8 +2,9 @@
   "name": "aistudio-accounts-switch",
   "version": "1.0.0",
   "dependencies": {
-    "playwright": "^1.53.1",
     "express": "^4.19.2",
+    "ioredis": "^5.7.0",
+    "playwright": "^1.53.1",
     "ws": "^8.17.0"
   }
 }

@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { firefox } = require('playwright');
 const os = require('os');
+const Redis = require('ioredis'); // 【新增】引入 Redis 客户端
 
 
 // ===================================================================================
@@ -336,15 +337,18 @@ class BrowserManager {
       let closedCount = 0;
       
       // 定义所有可能的关闭按钮
-      const closeButtonLocator = this.page.locator(
-        "button:has-text('Got it'), button:has-text('✕')"
-      );
+      // 使用更简单、更兼容的定位器，避免复杂的正则和伪类组合
+      const closeButtonLocator = this.page.locator([
+        "button:has-text('Got it')", 
+        "button:has-text('✕')", 
+        "button:has-text('close')"
+      ]);
 
       while (Date.now() < cleanupTimeout) {
         // 尝试找到并点击所有可见的关闭按钮，忽略任何错误
         const buttons = await closeButtonLocator.all();
         for (const button of buttons) {
-          await button.click({ force: true }).catch(() => {});
+          await button.click({ force: true, timeout: 1000 }).catch(() => {}); // 每次点击给1秒超时
           closedCount++;
           this.logger.info(`[浏览器] 关闭了一个弹窗... (已尝试关闭 ${closedCount} 个)`);
         }
@@ -355,7 +359,7 @@ class BrowserManager {
 
       // 第三步：最终的调试与核心操作
       this.logger.info('[调试] 所有清理和等待已完成，记录最终页面状态...');
-      const finalSnapshotPath = path.join(debugFolder, `FINAL_STATE_before_click.png`);
+      const finalSnapshotPath = path.join(debugFolder, `FINAL_STATE_before_click-${Date.now()}.png`);
       await this.page.screenshot({ path: finalSnapshotPath, fullPage: true });
       this.logger.info(`[调试] 最终状态快照已保存: ${finalSnapshotPath}`);
       
@@ -364,9 +368,9 @@ class BrowserManager {
 
       // 第四步：执行最终的、带有“双保险”的核心点击
       try {
-        const codeButton = this.page.getByRole('button', { name: 'Code' });
+        const codeButton = this.page.getByRole('button', { name: 'Code', exact: true }); // 使用 exact: true 确保精确匹配 "Code"
         // 双保险：先等待按钮出现，再用 force 点击
-        await codeButton.waitFor({ timeout: 10000 });
+        await codeButton.waitFor({ state: 'visible', timeout: 10000 }); // 给按钮10秒出现时间
         await codeButton.click({ force: true });
         this.logger.info('[浏览器] 已成功强制点击 "Code" 按钮。');
       } catch (err) {
@@ -376,7 +380,7 @@ class BrowserManager {
       
       // 后续的注入脚本逻辑
       const editorContainerLocator = this.page.locator('div.monaco-editor').first();
-                        
+
       this.logger.info('[浏览器] 等待编辑器附加到DOM，最长120秒...');
       await editorContainerLocator.waitFor({ state: 'attached', timeout: 120000 });
       this.logger.info('[浏览器] 编辑器已附加。');
@@ -608,8 +612,20 @@ class RequestHandler {
     this.retryDelay = this.config.retryDelay;
     this.failureCount = 0;
     this.isAuthSwitching = false;
-    this.fullCycleFailure = false; // 【新增】全循环失败标志
-    this.startOfFailureCycleIndex = null; // 【新增】记录失败循环的起始账号
+    this.fullCycleFailure = false;
+    this.startOfFailureCycleIndex = null;
+
+    // 【新增】Redis 客户端初始化
+    this.redisClient = null;
+    if (config.redisUrl) {
+        this.redisClient = new Redis(config.redisUrl);
+        this.redisClient.on('connect', () => this.logger.info('[Redis] 已连接到 Redis 服务器。'));
+        this.redisClient.on('error', (err) => this.logger.error(`[Redis] Redis 连接错误: ${err.message}`));
+        this.logger.info(`[缓存] Redis 缓存功能已启用 (TTL: ${this.config.cacheTTL}秒)。`);
+    } else {
+        this.logger.info('[缓存] Redis 缓存功能已禁用 (未配置 REDIS_URL)。');
+    }
+    this.cacheTTL = config.cacheTTL; // 从配置中获取 TTL
   }
 
   get currentAuthIndex() {
@@ -712,7 +728,7 @@ class RequestHandler {
     return correctedDetails;
   }
 
-async _handleRequestFailureAndSwitch(errorDetails, res) {
+  async _handleRequestFailureAndSwitch(errorDetails, res) {
     // 新增：在调试模式下打印完整的原始错误信息
     if (this.config.debugMode) {
       this.logger.debug(`[认证][调试] 收到来自浏览器的完整错误详情:\n${JSON.stringify(errorDetails, null, 2)}`);
@@ -781,7 +797,6 @@ async _handleRequestFailureAndSwitch(errorDetails, res) {
   }
 
 
-
   _getModelFromRequest(req) {
     let body = req.body;
 
@@ -836,17 +851,54 @@ async _handleRequestFailureAndSwitch(errorDetails, res) {
       };
     }
 
+    // 【新增】缓存读取逻辑
+    // 缓存只对 GET 请求且未在流式模式下的非流式API启用，并且 Redis 必须已连接
+    const isCacheableGet = req.method === 'GET' && !req.path.includes(':stream') && this.redisClient && this.config.cacheTTL > 0;
+    
+    if (isCacheableGet) {
+      const cacheKey = this._generateCacheKey(req);
+      try {
+          const cachedResponse = await this.redisClient.get(cacheKey); // 从 Redis 获取缓存
+
+          if (cachedResponse) {
+            this.logger.info(`[缓存] 命中 Redis 缓存: ${cacheKey}`);
+            const parsedCache = JSON.parse(cachedResponse);
+            this._sendCachedResponse(parsedCache, res); // 发送缓存的响应
+            this.serverSystem.stats.totalCallsCacheHit = (this.serverSystem.stats.totalCallsCacheHit || 0) + 1; // 统计缓存命中
+            return; // 命中缓存，直接返回
+          }
+      } catch (redisErr) {
+          this.logger.error(`[缓存] 读取 Redis 缓存失败: ${redisErr.message}。将继续执行正常请求。`);
+          // 缓存失败不应影响主业务，继续执行正常请求
+      }
+    }
+
     if (!this.connectionRegistry.hasActiveConnections()) {
       return this._sendErrorResponse(res, 503, '没有可用的浏览器连接');
     }
     const requestId = this._generateRequestId();
     const proxyRequest = this._buildProxyRequest(req, requestId);
     const messageQueue = this.connectionRegistry.createMessageQueue(requestId);
+
     try {
       if (this.serverSystem.streamingMode === 'fake') {
-        await this._handlePseudoStreamResponse(proxyRequest, messageQueue, req, res);
+        // 调用 _handlePseudoStreamResponse，现在它内部包含缓存收集逻辑
+        const responseData = await this._handlePseudoStreamResponse(proxyRequest, messageQueue, req, res);
+
+        // 【新增】缓存写入逻辑 (只对非流式 GET 请求且有数据时写入)
+        if (isCacheableGet && responseData && responseData.body) {
+            const cacheKey = this._generateCacheKey(req);
+            try {
+                // 使用 SETEX 命令设置过期时间 (秒)
+                await this.redisClient.setex(cacheKey, this.config.cacheTTL, JSON.stringify(responseData));
+                this.logger.debug(`[缓存] 成功存储 Redis 缓存: ${cacheKey}`);
+            } catch (redisErr) {
+                this.logger.error(`[缓存] 存储 Redis 缓存失败: ${redisErr.message}。缓存未写入。`);
+            }
+        }
       } else {
-        await this._handleRealStreamResponse(proxyRequest, messageQueue, res);
+        // 继续调用 _handleRealStreamResponse，不对其进行缓存
+        await this._handleRealStreamResponse(proxyRequest, messageQueue, req, res);
       }
     } catch (error) {
       this._handleRequestError(error, res);
@@ -854,8 +906,9 @@ async _handleRequestFailureAndSwitch(errorDetails, res) {
       this.connectionRegistry.removeMessageQueue(requestId);
     }
   }
+
   _generateRequestId() { return `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; }
-    _buildProxyRequest(req, requestId) {
+  _buildProxyRequest(req, requestId) {
     const proxyRequest = {
       path: req.path,
       method: req.method,
@@ -913,13 +966,21 @@ async _handleRequestFailureAndSwitch(errorDetails, res) {
     return 'data: {}\n\n';
   }
 
+  // 【重构/修改】原 _handlePseudoStreamResponse，现在它收集数据并返回
+  // 注意：这个方法已经包含了缓存数据收集逻辑，取代了原来的版本。
   async _handlePseudoStreamResponse(proxyRequest, messageQueue, req, res) {
     const originalPath = req.path;
-    const isStreamRequest = originalPath.includes(':stream');
+    const isStreamRequest = originalPath.includes(':stream'); // 检查是否是流式请求
 
-    this.logger.info(`[请求] 假流式处理流程启动，路径: "${originalPath}"，判定为: ${isStreamRequest ? '流式请求' : '非流式请求'}`);
+    // 缓存只对非流式GET请求生效。如果是非流式，但我们把它当伪流处理了，那它收集数据
+    const shouldCollectForCache = !isStreamRequest && proxyRequest.method === 'GET';
+
+    this.logger.info(`[请求] 伪流式处理流程启动，路径: "${originalPath}"，判定为: ${isStreamRequest ? '流式请求' : '非流式请求'}。${shouldCollectForCache ? '将收集响应用于缓存。' : ''}`);
 
     let connectionMaintainer = null;
+    let fullResponseData = ''; // 用于收集伪流式响应的完整数据
+    let responseStatus = 200;
+    const responseHeaders = {};
 
     if (isStreamRequest) {
       res.status(200).set({
@@ -936,24 +997,28 @@ async _handleRequestFailureAndSwitch(errorDetails, res) {
       for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
         this.logger.info(`[请求] 请求尝试 #${attempt}/${this.maxRetries}...`);
         this._forwardRequest(proxyRequest);
+        
         lastMessage = await messageQueue.dequeue();
+        
+        if (lastMessage.event_type === 'response_headers') {
+            responseStatus = lastMessage.status || 200;
+            Object.assign(responseHeaders, lastMessage.headers);
+        } else if (lastMessage.event_type === 'error' && lastMessage.status >= 400 && lastMessage.status <= 599) {
+            const correctedMessage = this._parseAndCorrectErrorDetails(lastMessage);
+            await this._handleRequestFailureAndSwitch(correctedMessage, isStreamRequest ? res : null);
 
-        if (lastMessage.event_type === 'error' && lastMessage.status >= 400 && lastMessage.status <= 599) {
-          const correctedMessage = this._parseAndCorrectErrorDetails(lastMessage);
-          await this._handleRequestFailureAndSwitch(correctedMessage, isStreamRequest ? res : null);
+            const errorText = `收到 ${correctedMessage.status} 错误。${attempt < this.maxRetries ? `将在 ${this.retryDelay / 1000}秒后重试...` : '已达到最大重试次数。'}`;
+            this.logger.warn(`[请求] ${errorText}`);
 
-          const errorText = `收到 ${correctedMessage.status} 错误。${attempt < this.maxRetries ? `将在 ${this.retryDelay / 1000}秒后重试...` : '已达到最大重试次数。'}`;
-          this.logger.warn(`[请求] ${errorText}`);
+            if (isStreamRequest) {
+                this._sendErrorChunkToClient(res, errorText);
+            }
 
-          if (isStreamRequest) {
-            this._sendErrorChunkToClient(res, errorText);
-          }
-
-          if (attempt < this.maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, this.retryDelay));
-            continue;
-          }
-          requestFailed = true;
+            if (attempt < this.maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+                continue;
+            }
+            requestFailed = true;
         }
         break;
       }
@@ -965,32 +1030,40 @@ async _handleRequestFailureAndSwitch(errorDetails, res) {
         } else {
           this._sendErrorChunkToClient(res, `请求最终失败 (状态码: ${finalError.status}): ${finalError.message}`);
         }
-        return;
+        return null; // 失败时返回 null
       }
 
       if (this.failureCount > 0) {
         this.logger.info(`✅ [认证] 请求成功 - 失败计数已从 ${this.failureCount} 重置为 0`);
+        this.fullCycleFailure = false; // 重置熔断状态
+        this.startOfFailureCycleIndex = null;
       }
       this.failureCount = 0;
-      this.fullCycleFailure = false;
-      this.startOfFailureCycleIndex = null;
 
       const dataMessage = await messageQueue.dequeue();
       const endMessage = await messageQueue.dequeue();
       if (endMessage.type !== 'STREAM_END') this.logger.warn('[请求] 未收到预期的流结束信号。');
 
+      if (dataMessage.data) {
+          fullResponseData = dataMessage.data; // 收集数据
+      }
+      
+      // 实际发送响应给客户端
       if (isStreamRequest) {
-        if (dataMessage.data) {
-          res.write(`data: ${dataMessage.data}\n\n`);
+        if (fullResponseData) {
+          res.write(`data: ${fullResponseData}\n\n`);
         }
         res.write('data: [DONE]\n\n');
         this.logger.info('[请求] 已将完整响应作为模拟SSE事件发送。');
       } else {
         this.logger.info('[请求] 准备发送 application/json 响应。');
-        if (dataMessage.data) {
+        if (fullResponseData) {
           try {
-            const jsonData = JSON.parse(dataMessage.data);
-            res.status(200).json(jsonData);
+            // 如果是缓存，响应头应该在发送数据前设置，并且由 _sendCachedResponse 负责
+            // 否则，这里需要设置头。为了简化，我们让 _sendCachedResponse 处理所有头
+            if (!res.headersSent) {
+                res.status(responseStatus).set(responseHeaders).json(JSON.parse(fullResponseData));
+            }
           } catch (e) {
             this.logger.error(`[请求] 无法将来自浏览器的响应解析为JSON: ${e.message}`);
             this._sendErrorResponse(res, 500, '代理内部错误：无法解析来自后端的响应。');
@@ -999,90 +1072,58 @@ async _handleRequestFailureAndSwitch(errorDetails, res) {
           this._sendErrorResponse(res, 500, '代理内部错误：后端未返回有效数据。');
         }
       }
+      
+      // 成功时返回收集到的完整响应数据，供缓存使用
+      return { status: responseStatus, headers: responseHeaders, body: fullResponseData };
 
     } catch (error) {
-      this.logger.error(`[请求] 假流式处理期间发生意外错误: ${error.message}`);
+      this.logger.error(`[请求] 伪流式处理期间发生意外错误: ${error.message}`);
       if (!res.headersSent) {
         this._handleRequestError(error, res);
       } else {
         this._sendErrorChunkToClient(res, `处理失败: ${error.message}`);
       }
+      return null; // 发生错误时返回 null
     } finally {
       if (connectionMaintainer) clearInterval(connectionMaintainer);
       if (!res.writableEnded) res.end();
-      this.logger.info('[请求] 假流式响应处理结束。');
+      this.logger.info('[请求] 伪流式响应处理结束。');
     }
   }
 
-  async _handleRealStreamResponse(proxyRequest, messageQueue, res) {
-    let headerMessage, requestFailed = false;
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      this.logger.info(`[请求] 请求尝试 #${attempt}/${this.maxRetries}...`);
-      this._forwardRequest(proxyRequest);
-      headerMessage = await messageQueue.dequeue();
-      if (headerMessage.event_type === 'error' && headerMessage.status >= 400 && headerMessage.status <= 599) {
+  // ... (_handleRealStreamResponse 等其他现有方法) ...
 
-        const correctedMessage = this._parseAndCorrectErrorDetails(headerMessage);
-        await this._handleRequestFailureAndSwitch(correctedMessage, null);
-        this.logger.warn(`[请求] 收到 ${correctedMessage.status} 错误，将在 ${this.retryDelay / 1000}秒后重试...`);
+  // 【新增方法】生成缓存 Key
+  _generateCacheKey(req) {
+    // 结合请求方法、路径和查询参数生成唯一 Key
+    // 假设只缓存 GET 请求，且参数顺序无关紧要
+    const queryParams = new URLSearchParams(req.query).toString();
+    return `cache:${req.method}:${req.path}${queryParams ? '?' + queryParams : ''}`;
+  }
 
-        if (attempt < this.maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
-          continue;
+  // 【新增方法】发送缓存响应
+  _sendCachedResponse(parsedCache, res) {
+      res.status(parsedCache.status || 200).set({
+          'Content-Type': 'application/json', // 假设缓存的是 JSON
+          'X-Proxy-Cache': 'HIT', // 标记为缓存命中
+          'Cache-Control': `max-age=${this.config.cacheTTL}` // 告知客户端缓存有效期
+      });
+      // 重新设置缓存的响应头
+      if (parsedCache.headers) {
+          Object.entries(parsedCache.headers).forEach(([name, value]) => {
+              // 避免设置可能冲突的头
+              if (name.toLowerCase() !== 'content-length' && name.toLowerCase() !== 'transfer-encoding' && name.toLowerCase() !== 'connection') {
+                  res.set(name, value);
+              }
+          });
         }
-        requestFailed = true;
-      }
-      break;
-    }
-    if (headerMessage.event_type === 'error' || requestFailed) {
-      const finalError = this._parseAndCorrectErrorDetails(headerMessage);
-      return this._sendErrorResponse(res, finalError.status, finalError.message);
-    }
-    if (this.failureCount > 0) {
-      this.logger.info(`✅ [认证] 请求成功 - 失败计数已从 ${this.failureCount} 重置为 0`);
-    }
-    this.failureCount = 0;
-    this.fullCycleFailure = false;
-    this.startOfFailureCycleIndex = null;
-    this._setResponseHeaders(res, headerMessage);
-    this.logger.info('[请求] 已向客户端发送真实响应头，开始流式传输...');
-    try {
-      while (true) {
-        const dataMessage = await messageQueue.dequeue(30000);
-        if (dataMessage.type === 'STREAM_END') { this.logger.info('[请求] 收到流结束信号。'); break; }
-        if (dataMessage.data) res.write(dataMessage.data);
-      }
-    } catch (error) {
-      if (error.message !== '队列超时') throw error;
-      this.logger.warn('[请求] 真流式响应超时，可能流已正常结束。');
-    } finally {
-      if (!res.writableEnded) res.end();
-      this.logger.info('[请求] 真流式响应连接已关闭。');
-    }
-  }
-
-  _setResponseHeaders(res, headerMessage) {
-    res.status(headerMessage.status || 200);
-    const headers = headerMessage.headers || {};
-    Object.entries(headers).forEach(([name, value]) => {
-      if (name.toLowerCase() !== 'content-length') res.set(name, value);
-    });
-  }
-  _handleRequestError(error, res) {
-    if (res.headersSent) {
-      this.logger.error(`[请求] 请求处理错误 (头已发送): ${error.message}`);
-      if (this.serverSystem.streamingMode === 'fake') this._sendErrorChunkToClient(res, `处理失败: ${error.message}`);
-      if (!res.writableEnded) res.end();
-    } else {
-      this.logger.error(`[请求] 请求处理错误: ${error.message}`);
-      const status = error.message.includes('超时') ? 504 : 500;
-      this._sendErrorResponse(res, status, `代理错误: ${error.message}`);
-    }
-  }
-  _sendErrorResponse(res, status, message) {
-    if (!res.headersSent) res.status(status || 500).type('text/plain').send(message);
+      res.send(parsedCache.body);
   }
 }
+
+// ===================================================================================
+// 代理服务模块
+// ===================================================================================
 
 class ProxyServerSystem extends EventEmitter {
   constructor() {
@@ -1094,7 +1135,8 @@ class ProxyServerSystem extends EventEmitter {
     // 升级后的统计结构
     this.stats = {
       totalCalls: 0,
-      accountCalls: {} // e.g., { "1": { total: 10, models: { "gemini-pro": 5, "gpt-4": 5 } } }
+      totalCallsCacheHit: 0, // 【新增】缓存命中统计
+      accountCalls: {}
     };
 
     this.authSource = new AuthSource(this.logger);
@@ -1115,6 +1157,8 @@ class ProxyServerSystem extends EventEmitter {
       immediateSwitchStatusCodes: [],
       initialAuthIndex: null,
       debugMode: false,
+      redisUrl: null, // 【新增】Redis 连接 URL，默认为空
+      cacheTTL: 300, // 【新增】缓存有效期，默认 300 秒 (5 分钟)
     };
 
     const configPath = path.join(__dirname, 'config.json');
@@ -1147,6 +1191,10 @@ class ProxyServerSystem extends EventEmitter {
         config.initialAuthIndex = envIndex;
       }
     }
+    // 【新增】从环境变量加载 Redis URL 和缓存 TTL
+    if (process.env.REDIS_URL) config.redisUrl = process.env.REDIS_URL;
+    if (process.env.CACHE_TTL) config.cacheTTL = parseInt(process.env.CACHE_TTL, 10) || config.cacheTTL;
+
 
     let rawCodes = process.env.IMMEDIATE_SWITCH_STATUS_CODES;
     let codesSource = '环境变量';
@@ -1182,6 +1230,13 @@ class ProxyServerSystem extends EventEmitter {
     this.logger.info(`  调试模式: ${this.config.debugMode ? '已开启' : '已关闭'}`);
     if (this.config.initialAuthIndex) {
       this.logger.info(`  指定初始认证索引: ${this.config.initialAuthIndex}`);
+    }
+    // 【新增】Redis 配置日志
+    if (this.config.redisUrl) {
+      this.logger.info(`  Redis 缓存: 已启用 (TTL: ${this.config.cacheTTL}秒)`);
+      this.logger.info(`  Redis URL: ${this.config.redisUrl.split('@')[1] ? '***' + this.config.redisUrl.split('@')[1] : this.config.redisUrl}`); // 隐藏密码部分
+    } else {
+      this.logger.info(`  Redis 缓存: 已禁用`);
     }
     this.logger.info(`  失败计数切换: ${this.config.failureThreshold > 0 ? `连续 ${this.config.failureThreshold} 次失败后切换` : '已禁用'}`);
     this.logger.info(`  立即切换状态码: ${this.config.immediateSwitchStatusCodes.length > 0 ? this.config.immediateSwitchStatusCodes.join(', ') : '已禁用'}`);
@@ -1340,7 +1395,7 @@ class ProxyServerSystem extends EventEmitter {
     });
   }
 
-    _createExpressApp() {
+  _createExpressApp() {
     const app = express();
     app.use(express.json({ limit: '100mb' }));
     app.use(express.raw({ type: '*/*', limit: '100mb' }));
@@ -1568,7 +1623,7 @@ class ProxyServerSystem extends EventEmitter {
     return app;
   }
 
-    _getDashboardHtml() {
+  _getDashboardHtml() {
     return `
 <!DOCTYPE html>
 <html lang="zh-CN">

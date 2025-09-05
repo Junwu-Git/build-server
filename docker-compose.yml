@@ -16,3 +16,22 @@ services:
     volumes:
       - ./auth:/home/user/auth
       - ./debug-screenshots:/home/user/debug-screenshots
+    networks:
+      - internal-redis-network # 新增：确保 build-server 可以访问到 redis-server
+
+  # 新增：Redis 服务
+  redis-server:
+    image: redis:latest 
+    container_name: redis
+    restart: always
+    command: redis-server --appendonly yes # 启用持久化 (可选，但推荐)
+    volumes:
+      - ./data:/data # 数据持久化
+    networks:
+      - internal-redis-network # 连接到内部网络，与 build-server 通信
+    # ports: # Redis 通常不需要对外暴露端口，但如果需要，可以取消注释
+    #   - "6379:6379" 
+
+networks:
+  internal-redis-network: # 新增：内部网络，用于 build-server 和 redis-server 通信
+    driver: bridge
