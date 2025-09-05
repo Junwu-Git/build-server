@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - 'main' # main 分支推送代码时触发 (主要用于更新工作流文件本身，或后续合并到 main 的提交)
-      - 'test' # 【新增】test 分支推送代码时触发 (用于测试镜像发布)
+      - 'test' # test 分支推送代码时触发 (用于测试镜像发布)
     tags:
       - 'v*.*.*' # Git Tag 推送时触发 (用于正式版本发布)
   workflow_dispatch: # 手动触发
@@ -37,16 +37,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          # 【关键】动态生成标签的逻辑：
+          # 关键修正：动态生成标签的逻辑，确保 enable 属性语法正确，并修正缩进
           tags: |
-            # 1. 只有推送 Git 标签时，才生成语义化版本标签和 :latest 标签
-            type=semver,pattern={{version}},enable={{is_tag}}
-            type=semver,pattern={{major}}.{{minor}},enable={{is_tag}}
-            type=raw,value=latest,enable={{is_tag}}
-            # 2. 只有推送 'main' 分支代码时，才生成 :main 标签
-            type=raw,value=main,enable={{branch == 'main'}}
-            # 3. 只有推送 'test' 分支代码时，才生成 :test 标签
-            type=raw,value=test,enable={{branch == 'test'}}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=main,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=raw,value=test,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/test' }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Set up Docker Buildx
