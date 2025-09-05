@@ -1,0 +1,67 @@
+:root {
+    --pico-font-size: 16px;
+    --pico-background-color: #11191f;
+    --pico-color: #dce3e9;
+    --pico-card-background-color: #1a242c;
+    --pico-card-border-color: #2b3a47;
+    --pico-primary: #3d8bfd;
+    --pico-primary-hover: #529bff;
+    --pico-primary-focus: rgba(61, 139, 253, 0.25);
+    --pico-primary-inverse: #fff;
+    --pico-form-element-background-color: #1a242c;
+    --pico-form-element-border-color: #2b3a47;
+    --pico-form-element-focus-color: var(--pico-primary);
+    --pico-h1-color: #fff;
+    --pico-h2-color: #f1f1f1;
+    --pico-muted-color: #7a8c99;
+    --pico-border-radius: 0.5rem;
+    --info-color: #17a2b8; /* 天蓝色，用于状态文本 */
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; margin: 0; padding: 2rem; background-color: var(--pico-background-color); color: var(--pico-color); }
+main.container { max-width: 1200px; margin: 0 auto; padding-top: 30px; display: none; /* Initially hidden */ }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; }
+article { border: 1px solid var(--pico-card-border-color); border-radius: var(--pico-border-radius); padding: 1.5rem; background: var(--pico-card-background-color); }
+h1, h2 { margin-top: 0; color: var(--pico-h1-color); }
+h2 { border-bottom: 1px solid var(--pico-card-border-color); padding-bottom: 0.5rem; margin-bottom: 1rem; color: var(--pico-h2-color); }
+.status-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; align-items: center;}
+.status-grid strong { color: var(--pico-color); white-space: nowrap;}
+.status-grid span { color: var(--pico-muted-color); text-align: right; }
+.status-text-info { color: var(--info-color); font-weight: bold; }
+.status-text-red { color: #dc3545; font-weight: bold; }
+.status-text-yellow { color: #ffc107; font-weight: bold; }
+.status-text-gray { color: var(--pico-muted-color); font-weight: bold; }
+.tag { display: inline-block; padding: 0.25em 0.6em; font-size: 0.75em; font-weight: 700; line-height: 1; text-align: center; white-space: nowrap; vertical-align: baseline; border-radius: 0.35rem; color: #fff; }
+.tag-info { background-color: #17a2b8; }
+.tag-blue { background-color: #007bff; }
+.tag-yellow { color: #212529; background-color: #ffc107; }
+ul { list-style: none; padding: 0; margin: 0; }
+.scrollable-list { max-height: 220px; overflow-y: auto; padding-right: 5px; border: 1px solid var(--pico-form-element-border-color); border-radius: 0.25rem; padding: 0.5rem;}
+.account-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-radius: 0.25rem; }
+.account-list li:nth-child(odd) { background-color: rgba(255,255,255,0.03); }
+.account-list .current { font-weight: bold; color: var(--pico-primary); }
+details { width: 100%; border-bottom: 1px solid var(--pico-form-element-border-color); }
+details:last-child { border-bottom: none; }
+details summary { cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.2rem; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary:hover { background-color: rgba(255,255,255,0.05); }
+.model-stats-list { padding: 0.5rem 0 0.5rem 1.5rem; font-size: 0.9em; background-color: rgba(0,0,0,0.1); }
+.model-stats-list li { display: flex; justify-content: space-between; padding: 0.2rem; }
+button, input[type="text"], input[type="number"] { background-color: var(--pico-form-element-background-color); border: 1px solid var(--pico-form-element-border-color); color: var(--pico-color); padding: 0.5rem 1rem; border-radius: var(--pico-border-radius); }
+button { cursor: pointer; background-color: var(--pico-primary); border-color: var(--pico-primary); color: var(--pico-primary-inverse); }
+button:hover { background-color: var(--pico-primary-hover); }
+.btn-danger { background-color: #dc3545; border-color: #dc3545; }
+.btn-sm { font-size: 0.8em; padding: 0.2rem 0.5rem; }
+.top-banner { position: fixed; top: 0; right: 0; background-color: #ffc107; color: #212529; padding: 5px 15px; font-size: 0.9em; z-index: 1001; border-bottom-left-radius: 0.5rem; }
+.toast { position: fixed; bottom: 20px; right: 20px; background-color: var(--pico-primary); color: white; padding: 15px; border-radius: 5px; z-index: 1000; opacity: 0; transition: opacity 0.5s; }
+.toast.show { opacity: 1; }
+.toast.error { background-color: #dc3545; }
+form label { display: block; margin-bottom: 0.5rem; }
+form input { width: 100%; box-sizing: border-box; }
+.form-group { margin-bottom: 1rem; }
+.switch-field { display: flex; overflow: hidden; }
+.switch-field input { position: absolute !important; clip: rect(0, 0, 0, 0); height: 1px; width: 1px; border: 0; overflow: hidden; }
+.switch-field label { background-color: var(--pico-form-element-background-color); color: var(--pico-muted-color); font-size: 14px; line-height: 1; text-align: center; padding: 8px 16px; margin-right: -1px; border: 1px solid var(--pico-form-element-border-color); transition: all 0.1s ease-in-out; width: 50%; }
+.switch-field label:hover { cursor: pointer; }
+.switch-field input:checked + label { background-color: var(--pico-primary); color: var(--pico-primary-inverse); box-shadow: none; }
+.switch-field label:first-of-type { border-radius: 4px 0 0 4px; }
+.switch-field label:last-of-type { border-radius: 0 4px 4px 0; }
