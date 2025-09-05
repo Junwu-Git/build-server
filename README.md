@@ -24,10 +24,10 @@
     version: '3.8'
 
     services:
-      build-server:
-        image: ghcr.io/junwu-git/build-server:latest
-        container_name: build-server
-        restart: on-failure:5
+      biu_biu_biu:
+        image: ghcr.io/junwu-git/biu_biu_biu:latest
+        container_name: biu_biu_biu
+        restart: unless-stopped
         ports:
           - "8889:8889"
         env_file:
@@ -61,15 +61,15 @@
     STREAMING_MODE=fake
     ```
 
-3.  📁 **创建本地目录**:
-    确保项目根目录下存在 `auth` 和 `debug-screenshots` 目录，并将您的 `auth-X.json` 文件放入 `auth` 目录。
-    为了避免权限问题，建议手动创建 `debug-screenshots` 目录，并赋予其写入权限：
+3.  📁 **创建本地目录与准备认证文件**:
+    在项目根目录中，创建 `auth` 和 `debug-screenshots` 目录。
     ```bash
     mkdir auth debug-screenshots
-    chmod 777 debug-screenshots # 确保所有用户可读写，避免权限问题
+    chmod 777 debug-screenshots # 确保容器有权限写入调试截图
     ```
+    本项目依赖于 `camoufox` 生成的浏览器认证文件。请运行 `camoufox` 项目，完成登录后，将其生成的 `auth-X.json`（`X` 通常是数字）文件复制到本项目的 `auth` 目录中。
 
-5.  🚀 **启动服务**:
+4.  🚀 **启动服务**:
     ```bash
     docker-compose up -d
     ```
