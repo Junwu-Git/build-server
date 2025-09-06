@@ -21,7 +21,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # 从第一阶段（playwright_source）精确地复制预装好的浏览器到我们的最终镜像中。
-COPY --from=playwright_source /ms-playwright/firefox-* /ms-playwright/
+COPY --from=playwright_source /ms-playwright/ /ms-playwright/
 
 # 设置环境变量，告诉 Playwright 在我们指定的新位置寻找浏览器。
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
