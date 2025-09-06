@@ -58,9 +58,19 @@ function getNextAuthIndex() {
   console.log(`▶️  准备为账户 #${newIndex} 创建新的认证文件...`);
   console.log(`▶️  启动浏览器...`);
 
-  const browser = await firefox.launch({
+  const launchOptions = {
     headless: false,
-  });
+  };
+
+  const camoufoxPath = process.env.CAMOUFOX_EXECUTABLE_PATH;
+  if (camoufoxPath) {
+    launchOptions.executablePath = camoufoxPath;
+    console.log(`[浏览器] 检测到 CAMOUFOX_EXECUTABLE_PATH，将使用自定义 Camoufox 浏览器: ${camoufoxPath}`);
+  } else {
+    console.log('[浏览器] 未设置 CAMOUFOX_EXECUTABLE_PATH，将使用默认 Playwright 浏览器。');
+  }
+
+  const browser = await firefox.launch(launchOptions);
 
   const context = await browser.newContext();
   const page = await context.newPage();

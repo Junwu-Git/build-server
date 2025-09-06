@@ -18,14 +18,7 @@
 
 要快速启动并运行此项目，请遵循以下步骤。
 
-1.  **[重要] 安装浏览器依赖**:
-    本项目依赖 Playwright 来控制一个兼容的 Firefox 浏览器。在执行任何其他操作之前，请先在您的项目根目录下运行以下命令来下载所需的浏览器版本：
-    ```bash
-    npx playwright install firefox
-    ```
-    > **注意**: 此步骤仅需在首次设置或 Playwright 更新后执行一次。
-
-2.  📝 **准备 `docker-compose.yml` 文件**:
+1.  📝 **准备 `docker-compose.yml` 文件**:
     在项目根目录创建 `docker-compose.yml`，并粘贴以下内容：
     ```yaml
     version: '3.8'
@@ -44,8 +37,8 @@
             limits:
               memory: 1024M          
         volumes:
-          - ./auth:/home/user/auth
-          - ./debug-screenshots:/home/user/debug-screenshots
+          - ./auth:/app/auth
+          - ./debug-screenshots:/app/debug-screenshots
     ```
 
 3.  🔑 **准备 `.env` 文件**:

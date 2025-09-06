@@ -15,11 +15,16 @@ const Logger = {
 
 class ConnectionManager extends EventTarget {
   // =================================================================
-  // ===                 *** 请修改此行   *** ===
-  constructor(endpoint = "ws://127.0.0.1:9998") {
-    // =================================================================
+  constructor(endpoint) {
     super();
-    this.endpoint = endpoint;
+    if (endpoint) {
+      this.endpoint = endpoint;
+    } else {
+      // 动态确定 WebSocket 端点
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host;
+      this.endpoint = `${protocol}//${host}`;
+    }
     this.socket = null;
     this.isConnected = false;
     this.reconnectDelay = 5000;
