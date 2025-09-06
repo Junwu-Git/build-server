@@ -14,8 +14,8 @@ services:
         limits:
           memory: 1024M
     volumes:
-      - ./auth:/home/node/app/auth
-      - ./debug-screenshots:/home/node/app/debug-screenshots
+      - ./auth:/app/auth
+      - ./debug-screenshots:/app/debug-screenshots
     networks:
       - internal-redis-network # 确保 biu_biu_biu 可以访问到 redis-server
 
