@@ -16,7 +16,7 @@ RUN npm install
 
 # 下载并解压 Camoufox 浏览器
 RUN wget https://github.com/daijro/camoufox/releases/download/v135.0.1-beta.24/camoufox-135.0.1-beta.24-lin.x86_64.zip \
-    && unzip -o camoufox-135.0.1-beta.24-lin.x86_64.zip -d camoufox-linux \
+    && (unzip -o camoufox-135.0.1-beta.24-lin.x86_64.zip -d camoufox-linux || true) \
     && rm camoufox-135.0.1-beta.24-lin.x86_64.zip
 
 # 复制项目的其余所有文件
