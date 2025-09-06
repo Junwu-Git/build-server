@@ -32,6 +32,13 @@ class BrowserManager {
     }
   }
 
+  _onDisconnected() {
+    this.logger.error('❌ [浏览器] 浏览器意外断开连接！服务器可能需要重启。');
+    this.browser = null;
+    this.context = null;
+    this.page = null;
+  }
+
   async launchBrowser(authIndex) {
     if (this.browser) {
       this.logger.warn('尝试启动一个已在运行的浏览器实例，操作已取消。');
@@ -91,10 +98,7 @@ class BrowserManager {
         headless: true,
         executablePath: this.browserExecutablePath,
       });
-      this.browser.on('disconnected', () => {
-        this.logger.error('❌ [浏览器] 浏览器意外断开连接！服务器可能需要重启。');
-        this.browser = null; this.context = null; this.page = null;
-      });
+      this.browser.on('disconnected', this._onDisconnected.bind(this));
       this.context = await this.browser.newContext({
         storageState: storageStateObject,
         viewport: { width: 1280, height: 720 },
@@ -253,10 +257,13 @@ class BrowserManager {
 
   async closeBrowser() {
     if (this.browser) {
-      this.logger.info('[浏览器] 正在关闭当前浏览器实例...');
+      this.logger.info('正在为账号切换关闭浏览器，跳过全局停机标志。');
+      this.browser.removeListener('disconnected', this._onDisconnected.bind(this));
       await this.browser.close();
-      this.browser = null; this.context = null; this.page = null;
-      this.logger.info('[浏览器] 浏览器已关闭。');
+      this.browser = null;
+      this.context = null;
+      this.page = null;
+      this.logger.info('[浏览器] 浏览器实例已成功关闭。');
     }
   }
 
