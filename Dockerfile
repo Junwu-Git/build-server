@@ -17,6 +17,10 @@ RUN apt-get update && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
+# 安装 wget 和 unzip，并清理 apt 缓存
+RUN apt-get update && apt-get install -y wget unzip \
+    && rm -rf /var/lib/apt/lists/*
+
 # 下载并安装 Camoufox (使用用户验证过的方法)
 RUN wget https://github.com/daijro/camoufox/releases/download/v135.0.1-beta.24/camoufox-135.0.1-beta.24-lin.x86_64.zip \
     && unzip camoufox-135.0.1-beta.24-lin.x86_64.zip -d camoufox-linux \
