@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y wget unzip \
 
 # 下载并安装 Camoufox (使用用户验证过的方法)
 RUN wget https://github.com/daijro/camoufox/releases/download/v135.0.1-beta.24/camoufox-135.0.1-beta.24-lin.x86_64.zip \
-    && unzip -o camoufox-135.0.1-beta.24-lin.x86_64.zip -d camoufox-linux \
+    && (unzip -o camoufox-135.0.1-beta.24-lin.x86_64.zip -d camoufox-linux || true) \
     && rm camoufox-135.0.1-beta.24-lin.x86_64.zip
 
 # 复制 package.json 并安装生产依赖
