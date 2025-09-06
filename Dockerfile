@@ -34,7 +34,7 @@ RUN npm ci --omit=dev
 COPY . .
 
 # 设置 Camoufox 的可执行路径环境变量
-ENV CAMOUFOX_EXECUTABLE_PATH="/app/camoufox-linux/firefox/firefox"
+ENV CAMOUFOX_EXECUTABLE_PATH="/app/camoufox-linux/camoufox"
 
 # 暴露应用端口
 EXPOSE 8889
