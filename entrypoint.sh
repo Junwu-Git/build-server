@@ -38,8 +38,8 @@ echo "容器内当前 node 的 UID: ${CURRENT_UID}, GID: ${CURRENT_GID}"
 echo "正在修复挂载目录的所有权..."
 # 使用 chown -R 确保 node 用户拥有对这些目录的完全访问权限
 # /home/node/app 是新的工作目录
-chown -R node:node /home/node/app/auth
-chown -R node:node /home/node/app/debug-screenshots
+chown -R node:node /app/auth
+chown -R node:node /app/debug-screenshots
 echo "权限修复完成。"
 
 # --- 执行主命令 ---
