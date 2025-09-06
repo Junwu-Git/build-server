@@ -2,7 +2,7 @@
 # 阶段 1: 仅作为 Playwright 官方浏览器的可靠来源
 # 我们只使用这个阶段来获取预装好的浏览器文件。
 # --------------------------------------------------------------------
-FROM mcr.microsoft.com/playwright:v1.44.0-jammy AS playwright_source
+FROM mcr.microsoft.com/playwright:v1.55.0-jammy AS playwright_source
 
 # --------------------------------------------------------------------
 # 阶段 2: 构建最终的、经过优化的生产镜像
